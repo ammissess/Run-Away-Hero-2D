@@ -1,4 +1,4 @@
-package com.example.game2dfighting.lifecycle;
+package com.example.game2dfighting.ui;
 
 import android.content.Context;
 import android.graphics.Canvas;

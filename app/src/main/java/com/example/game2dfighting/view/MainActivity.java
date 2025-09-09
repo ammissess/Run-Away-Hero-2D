@@ -1,24 +1,19 @@
-package com.example.game2dfighting;
+package com.example.game2dfighting.view;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.FrameLayout;
+import android.widget.Button;
+import com.example.game2dfighting.R;
 
-import com.example.game2dfighting.lifecycle.JoystickView;
-import com.example.game2dfighting.view.GameView;
 
 public class MainActivity extends Activity {
-    private GameView gameView;
-    private JoystickView joystickView;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // Ẩn thanh trạng thái và thanh điều hướng
+        // Fullscreen + immersive
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().getDecorView().setSystemUiVisibility(
@@ -26,37 +21,11 @@ public class MainActivity extends Activity {
                         | View.SYSTEM_UI_FLAG_FULLSCREEN
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
 
-        FrameLayout layout = new FrameLayout(this);
-        gameView = new GameView(this);
+        setContentView(R.layout.activity_main);
 
-        // Tạo joystick
-        joystickView = new JoystickView(this, (xPercent, yPercent) -> {
-            gameView.setMovingUp(yPercent < -0.2f);
-            gameView.setMovingDown(yPercent > 0.2f);
-            gameView.setMovingLeft(xPercent < -0.2f);
-            gameView.setMovingRight(xPercent > 0.2f);
-        });
-
-        FrameLayout.LayoutParams jsParams = new FrameLayout.LayoutParams(400, 400);
-        jsParams.leftMargin = 50;
-        jsParams.topMargin = getResources().getDisplayMetrics().heightPixels - 500;
-        joystickView.setLayoutParams(jsParams);
-
-        layout.addView(gameView);
-        layout.addView(joystickView);
-
-        setContentView(layout);
-    }
-
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        gameView.handleKeyDown(keyCode);
-        return true;
-    }
-
-    @Override
-    public boolean onKeyUp(int keyCode, KeyEvent event) {
-        gameView.handleKeyUp(keyCode);
-        return true;
+        Button playBtn = findViewById(R.id.play_button);
+        playBtn.setOnClickListener(v ->
+                startActivity(new Intent(MainActivity.this, HomeActivity.class))
+        );
     }
 }
