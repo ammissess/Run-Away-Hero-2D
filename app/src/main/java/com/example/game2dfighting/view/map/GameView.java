@@ -11,54 +11,52 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import com.example.game2dfighting.game.entity.Player;
+import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.manager.EnemyManager;
 
 import java.util.ArrayList;
 import java.util.Random;
 
-/**
- * GameView: SurfaceView điều khiển vòng lặp game.
- * Đã refactor để dùng Player + EnemyManager nhưng giữ nguyên cảm giác chơi cũ.
- */
 public class GameView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
     private static final String TAG = "GameView";
-
-    // Thread & Surface
     private SurfaceHolder holder;
     private Thread gameThread;
     private volatile boolean isRunning = false;
 
     // Map & Camera
-    private final int mapWidth = 3000;
-    private final int mapHeight = 3000;
-    private int cameraX = 0; // góc trên trái của camera (tọa độ thế giới)
-    private int cameraY = 0;
+    private final int mapWidth = 3000, mapHeight = 3000;
+    private int cameraX = 0, cameraY = 0;
 
-    // Player (thay cho playerX/Y/Width/Height/Speed)
+    // Entities
     private Player player;
+    private EnemyManager enemyMgr;
 
-    // Điều khiển (để tương thích joystick/phím cũ)
-    private boolean movingUp = false, movingDown = false, movingLeft = false, movingRight = false;
+    // Input (từ joystick/phím)
+    private boolean movingUp, movingDown, movingLeft, movingRight;
 
-    // Kiếm quay quanh player
+    // Kiếm quay
     private final ArrayList<Sword> swords = new ArrayList<>();
     private static final int MAX_SWORDS = 14;
-    private float angle = 0f; // góc quay (độ)
+    private float angle = 0f; // độ
 
-    // Điểm xanh (ăn để tăng mana)
+    // Điểm xanh (tăng mana & nâng cấp kiếm)
     private final ArrayList<Point> points = new ArrayList<>();
-    private int mana = 0;
-    private int maxMana = 10;
 
-    // Enemy
-    private EnemyManager enemyMgr;
+    // Vẽ & RNG
+    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Random random = new Random();
 
     // Pause
     private volatile boolean paused = false;
 
-    // Vẽ
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Random random = new Random();
+    // Game over callback
+    public interface GameEventListener { void onGameOver(); }
+    private GameEventListener listener;
+    public void setGameEventListener(GameEventListener l) { this.listener = l; }
+
+    // Damage config
+    private final int SWORD_DAMAGE = 10;   // mỗi lần kiếm quét trúng quái
+    private final int ENEMY_TOUCH_DAMAGE = 5; // mỗi frame chạm player (đơn giản)
 
     public GameView(Context context) {
         super(context);
@@ -72,48 +70,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private void initGame() {
-        // Player: giữ kích thước & tốc độ giống code cũ
         player = new Player(100, 100, 100, 100);
-        player.speed = 5;
+        player.setMaxMana(10);  // như cũ
+        // player.setMaxHp(100); player.setMaxEnergy(100); // đã mặc định
 
-        // 1 kiếm ban đầu
         swords.clear();
         swords.add(new Sword(0));
 
-        // Enemy Manager
         enemyMgr = new EnemyManager(mapWidth, mapHeight);
-
-        // Điểm xanh khởi tạo sẽ sinh ở surfaceCreated (vì khi đó đã có surface size)
     }
 
     // ===== Pause API =====
     public void setPaused(boolean paused) {
         this.paused = paused;
         if (paused) {
-            // ngắt input ngay khi pause
             movingUp = movingDown = movingLeft = movingRight = false;
-            if (player != null) {
-                player.up = player.down = player.left = player.right = false;
-            }
+            player.up = player.down = player.left = player.right = false;
         }
     }
-
     public boolean isPaused() { return paused; }
 
-    // ===== Surface callbacks =====
-    @Override
-    public void surfaceCreated(SurfaceHolder holder) {
-        Log.d(TAG, "surfaceCreated");
+    // ===== Surface =====
+    @Override public void surfaceCreated(SurfaceHolder holder) {
         this.holder = holder;
 
         if (points.isEmpty()) {
-            // sinh trước 200 điểm xanh trên map
-            final int count = 200;
+            int count = 200;
             for (int i = 0; i < count; i++) {
-                int maxX = Math.max(1, mapWidth - 40);
-                int maxY = Math.max(1, mapHeight - 40);
-                int x = random.nextInt(maxX) + 20;
-                int y = random.nextInt(maxY) + 20;
+                int x = random.nextInt(Math.max(1, mapWidth - 40)) + 20;
+                int y = random.nextInt(Math.max(1, mapHeight - 40)) + 20;
                 points.add(new Point(x, y));
             }
         }
@@ -124,145 +109,69 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             gameThread.start();
         }
     }
-
     @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
-
-    @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
-        Log.d(TAG, "surfaceDestroyed");
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
         isRunning = false;
-        try {
-            if (gameThread != null) gameThread.join();
-        } catch (InterruptedException e) {
-            Log.e(TAG, "Error stopping thread", e);
-        }
+        try { if (gameThread != null) gameThread.join(); } catch (InterruptedException e) { Log.e(TAG, "stop", e); }
     }
 
-    // ===== Game loop =====
-    @Override
-    public void run() {
+    // ===== Loop =====
+    @Override public void run() {
         while (isRunning) {
-            if (holder == null || !holder.getSurface().isValid()) {
-                sleep(16);
-                continue;
-            }
+            if (holder == null || !holder.getSurface().isValid()) { sleep(16); continue; }
 
             long frameStart = System.currentTimeMillis();
 
-            // -------- Update (logic) --------
             if (!paused) {
-                // 1) Cập nhật input -> Player
-                player.up = movingUp;
-                player.down = movingDown;
-                player.left = movingLeft;
-                player.right = movingRight;
+                // input -> player
+                player.up = movingUp; player.down = movingDown; player.left = movingLeft; player.right = movingRight;
 
-                // 2) Player.update()
+                // update player
                 player.update();
+                clampPlayerToMap();
 
-                // 3) Giới hạn Player trong bản đồ
-                if (player.x < 0) player.x = 0;
-                if (player.y < 0) player.y = 0;
-                if (player.x + player.w > mapWidth) player.x = mapWidth - player.w;
-                if (player.y + player.h > mapHeight) player.y = mapHeight - player.h;
+                // camera follow
+                cameraX = (int) (player.centerX() - getWidth()/2f);
+                cameraY = (int) (player.centerY() - getHeight()/2f);
+                clampCamera();
 
-                // 4) Camera bám Player
-                cameraX = (int) (player.centerX() - getWidth() / 2f);
-                cameraY = (int) (player.centerY() - getHeight() / 2f);
-                if (cameraX < 0) cameraX = 0;
-                if (cameraY < 0) cameraY = 0;
-                cameraX = Math.min(cameraX, Math.max(0, mapWidth - getWidth()));
-                cameraY = Math.min(cameraY, Math.max(0, mapHeight - getHeight()));
+                // rotate swords
+                angle += 3f; if (angle >= 360f) angle -= 360f;
 
-                // 5) Quay kiếm
-                angle += 3f;
-                if (angle >= 360f) angle -= 360f;
-
-                // 6) Enemy spawn & move
+                // enemies
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player);
 
-                // 7) Điểm xanh (ăn để tăng mana, có thể nâng cấp kiếm)
+                // collisions
+                handleSwordHitsEnemies();
+                handleEnemiesHitPlayer();
+
+                // points/mana/level-up swords
                 updatePointsAndLevelUpIfNeeded();
             }
 
-            // -------- Render (vẽ) --------
+            // render
             Canvas canvas = holder.lockCanvas();
             if (canvas != null) {
                 try {
-                    // Nền trắng
-                    canvas.drawColor(Color.WHITE);
-
-                    // Vẽ map nền (xám nhạt)
-                    Paint mapBg = new Paint();
-                    mapBg.setStyle(Paint.Style.FILL);
-                    mapBg.setColor(Color.rgb(240, 240, 240));
-                    canvas.drawRect(0 - cameraX, 0 - cameraY, mapWidth - cameraX, mapHeight - cameraY, mapBg);
-
-                    // Vẽ Player (hình chữ nhật đỏ như cũ)
-                    float drawPlayerX = player.x - cameraX;
-                    float drawPlayerY = player.y - cameraY;
-                    paint.setStyle(Paint.Style.FILL);
-                    paint.setColor(Color.RED);
-                    canvas.drawRect(drawPlayerX, drawPlayerY, drawPlayerX + player.w, drawPlayerY + player.h, paint);
-
-                    // Vẽ Enemy (chấm đỏ nhỏ)
-                    enemyMgr.draw(canvas, cameraX, cameraY);
-
-                    // Vẽ kiếm quay quanh Player
-                    drawSwords(canvas, drawPlayerX, drawPlayerY);
-
-                    // Kiểm tra va chạm kiếm - quái (và remove nếu trúng)
-                    checkEnemiesHitBySwords();
-
-                    // Vẽ điểm xanh (khi pause chỉ vẽ; khi chạy, logic ăn điểm đã xử lý ở update)
-                    drawPoints(canvas);
-
-                    // Thanh mana
-                    drawManaBar(canvas);
-
-                    // Viền bản đồ
-                    paint.setStyle(Paint.Style.STROKE);
-                    paint.setStrokeWidth(8f);
-                    paint.setColor(Color.BLACK);
-                    float left = 0 - cameraX, top = 0 - cameraY, right = mapWidth - cameraX, bottom = mapHeight - cameraY;
-                    canvas.drawRect(left, top, right, bottom, paint);
-                    paint.setStyle(Paint.Style.FILL);
-
-                    // Overlay "PAUSED" (nếu bạn dùng overlay XML thì có thể bỏ khối này)
-                    if (paused) {
-                        Paint dim = new Paint();
-                        dim.setColor(Color.argb(120, 0, 0, 0));
-                        canvas.drawRect(0, 0, getWidth(), getHeight(), dim);
-
-                        Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
-                        t.setColor(Color.WHITE);
-                        t.setTextSize(64f);
-                        t.setTextAlign(Paint.Align.CENTER);
-                        canvas.drawText("PAUSED", getWidth() / 2f, getHeight() / 2f, t);
-                    }
-
+                    render(canvas);
                 } finally {
                     holder.unlockCanvasAndPost(canvas);
                 }
             }
 
-            // 60 FPS (xấp xỉ)
             long dt = System.currentTimeMillis() - frameStart;
-            long sleep = 16 - dt;
-            if (sleep > 0) sleep(sleep);
+            long sleep = 16 - dt; if (sleep > 0) sleep(sleep);
         }
     }
 
-    private void sleep(long ms) {
-        try { Thread.sleep(ms); } catch (InterruptedException ignore) {}
-    }
+    private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignore) {} }
 
-    // ===== Điều khiển (giữ tương thích với Joystick/Key) =====
-    public void setMovingUp(boolean v)    { this.movingUp = v; }
-    public void setMovingDown(boolean v)  { this.movingDown = v; }
-    public void setMovingLeft(boolean v)  { this.movingLeft = v; }
-    public void setMovingRight(boolean v) { this.movingRight = v; }
+    // ===== Input API =====
+    public void setMovingUp(boolean v)    { movingUp = v; }
+    public void setMovingDown(boolean v)  { movingDown = v; }
+    public void setMovingLeft(boolean v)  { movingLeft = v; }
+    public void setMovingRight(boolean v) { movingRight = v; }
 
     public void handleKeyDown(int keyCode) {
         switch (keyCode) {
@@ -276,7 +185,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             case KeyEvent.KEYCODE_DPAD_RIGHT: movingRight = true; break;
         }
     }
-
     public void handleKeyUp(int keyCode) {
         switch (keyCode) {
             case KeyEvent.KEYCODE_W:
@@ -290,14 +198,167 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
-    // ===== Kiếm quay quanh nhân vật =====
-    private static class Sword {
-        float baseAngle; // độ
-        Sword(float baseAngle) { this.baseAngle = baseAngle; }
+    // ===== Update helpers =====
+    private void clampPlayerToMap() {
+        if (player.x < 0) player.x = 0;
+        if (player.y < 0) player.y = 0;
+        if (player.x + player.w > mapWidth)  player.x = mapWidth - player.w;
+        if (player.y + player.h > mapHeight) player.y = mapHeight - player.h;
+    }
+    private void clampCamera() {
+        if (cameraX < 0) cameraX = 0; if (cameraY < 0) cameraY = 0;
+        cameraX = Math.min(cameraX, Math.max(0, mapWidth - getWidth()));
+        cameraY = Math.min(cameraY, Math.max(0, mapHeight - getHeight()));
+    }
+
+    private static class Sword { float baseAngle; Sword(float a){ baseAngle=a; } }
+    private static class Point { int x,y; Point(int x,int y){this.x=x;this.y=y;} }
+
+    private void handleSwordHitsEnemies() {
+        float cx = player.centerX(), cy = player.centerY();
+        float swordLen = player.w * 1.5f;
+        float halfThickness = player.w / 20f;
+
+        // Duyệt danh sách theo index từ cuối để remove an toàn
+        for (int i = enemyMgr.list().size() - 1; i >= 0; i--) {
+            Enemy e = enemyMgr.list().get(i);
+            boolean hit = false;
+            for (int s = 0; s < swords.size(); s++) {
+                float base = swords.get(s).baseAngle;
+                float rad = (float) Math.toRadians(angle + base);
+                float sx = (float) (cx + Math.sin(rad) * swordLen);
+                float sy = (float) (cy + Math.cos(rad) * swordLen);
+                if (circleVsSegment(e.x, e.y, e.radius, cx, cy, sx, sy, halfThickness)) {
+                    hit = true; break;
+                }
+            }
+            if (hit) {
+                boolean dead = e.takeDamage(SWORD_DAMAGE);
+                if (dead) enemyMgr.list().remove(i);
+            }
+        }
+    }
+
+    private void handleEnemiesHitPlayer() {
+        float pr = Math.min(player.w, player.h) / 2f;
+        for (int i = 0; i < enemyMgr.list().size(); i++) {
+            Enemy e = enemyMgr.list().get(i);
+            float dx = e.x - player.centerX();
+            float dy = e.y - player.centerY();
+            float rr = e.radius + pr;
+            if (dx*dx + dy*dy <= rr*rr) {
+                boolean dead = player.takeDamage(ENEMY_TOUCH_DAMAGE);
+                if (dead) {
+                    // Game Over -> báo cho Activity quay về Home
+                    if (listener != null) listener.onGameOver();
+                    // Dừng loop ngay để tránh tiếp tục xử lý khung hình
+                    setPaused(true);
+                    return;
+                }
+            }
+        }
+    }
+
+    private boolean circleVsSegment(float ex, float ey, float r,
+                                    float ax, float ay, float bx, float by,
+                                    float halfThickness) {
+        float abx = bx - ax, aby = by - ay;
+        float ab2 = abx*abx + aby*aby;
+        if (ab2 < 1e-6f) {
+            float dx = ex - ax, dy = ey - ay;
+            float rr = r + halfThickness;
+            return dx*dx + dy*dy <= rr*rr;
+        }
+        float t = ((ex - ax)*abx + (ey - ay)*aby) / ab2;
+        if (t < 0f) t = 0f; else if (t > 1f) t = 1f;
+        float px = ax + t*abx, py = ay + t*aby;
+        float dx = ex - px, dy = ey - py;
+        float rr = r + halfThickness;
+        return dx*dx + dy*dy <= rr*rr;
+    }
+
+    private void updatePointsAndLevelUpIfNeeded() {
+        Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
+        for (int i = points.size() - 1; i >= 0; i--) {
+            Point p = points.get(i);
+            Rect pointRect = new Rect(p.x - 10, p.y - 10, p.x + 10, p.y + 10);
+            if (Rect.intersects(playerRect, pointRect)) {
+                points.remove(i);
+
+                // tăng mana trong Player
+                player.addMana(1);
+
+                // Nâng cấp kiếm khi đủ mana
+                if (player.getMana() >= player.getMaxMana() && swords.size() < MAX_SWORDS) {
+                    player.setMana(0);
+                    swords.add(new Sword(0));
+                    int n = swords.size();
+                    for (int j = 0; j < n; j++) {
+                        float step = 360f / n;
+                        swords.get(j).baseAngle = j * step;
+                    }
+                    player.setMaxMana(Math.min(300, Math.round(player.getMaxMana() * 1.1f)));
+                }
+
+                // spawn lại 1 điểm mới
+                int x = random.nextInt(mapWidth - 40) + 20;
+                int y = random.nextInt(mapHeight - 40) + 20;
+                points.add(new Point(x, y));
+            }
+        }
+    }
+
+    // ===== Render =====
+    private void render(Canvas canvas) {
+        // nền trắng
+        canvas.drawColor(Color.WHITE);
+
+        // map nền
+        Paint mapBg = new Paint();
+        mapBg.setStyle(Paint.Style.FILL);
+        mapBg.setColor(Color.rgb(240, 240, 240));
+        canvas.drawRect(0 - cameraX, 0 - cameraY, mapWidth - cameraX, mapHeight - cameraY, mapBg);
+
+        // player (hình chữ nhật đỏ như trước)
+        float drawPlayerX = player.x - cameraX, drawPlayerY = player.y - cameraY;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.RED);
+        canvas.drawRect(drawPlayerX, drawPlayerY, drawPlayerX + player.w, drawPlayerY + player.h, paint);
+
+        // enemies + máu overhead
+        enemyMgr.draw(canvas, cameraX, cameraY);
+
+        // swords
+        drawSwords(canvas, drawPlayerX, drawPlayerY);
+
+        // points (chấm xanh)
+        drawPoints(canvas);
+
+        // HUD: Mana (trên), dưới là HP, dưới nữa là Energy
+        drawHud(canvas);
+
+        // viền map
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(8f);
+        paint.setColor(Color.BLACK);
+        canvas.drawRect(0 - cameraX, 0 - cameraY, mapWidth - cameraX, mapHeight - cameraY, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        // (tuỳ chọn) overlay PAUSED nếu bạn không dùng overlay XML
+        if (paused) {
+            Paint dim = new Paint();
+            dim.setColor(Color.argb(120, 0, 0, 0));
+            canvas.drawRect(0, 0, getWidth(), getHeight(), dim);
+
+            Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
+            t.setColor(Color.WHITE);
+            t.setTextSize(64f);
+            t.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("PAUSED", getWidth()/2f, getHeight()/2f, t);
+        }
     }
 
     private void drawSwords(Canvas canvas, float drawPlayerX, float drawPlayerY) {
-        // vẽ theo toạ độ màn hình (đã trừ camera)
         paint.setColor(Color.BLACK);
         float swordLength = player.w * 1.5f;
         float swordWidth  = player.w / 10f;
@@ -306,68 +367,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         for (Sword sword : swords) {
             canvas.save();
-            float currentAngle = angle + sword.baseAngle; // độ
+            float currentAngle = angle + sword.baseAngle;
             canvas.rotate(currentAngle, centerX, centerY);
-            canvas.drawRect(
-                    centerX - swordWidth / 2f,
-                    centerY,
-                    centerX + swordWidth / 2f,
-                    centerY + swordLength,
-                    paint
-            );
+            canvas.drawRect(centerX - swordWidth/2f, centerY, centerX + swordWidth/2f, centerY + swordLength, paint);
             canvas.restore();
-        }
-    }
-
-    private void checkEnemiesHitBySwords() {
-        // dùng toạ độ thế giới cho va chạm
-        float cx = player.centerX();
-        float cy = player.centerY();
-        float swordLen = player.w * 1.5f;
-        float halfThickness = player.w / 20f; // nửa bề dày hitbox
-        float[] baseAngles = new float[swords.size()];
-        for (int i = 0; i < swords.size(); i++) baseAngles[i] = swords.get(i).baseAngle;
-
-        enemyMgr.removeIfHitBySwords(cx, cy, swordLen, halfThickness, angle, baseAngles);
-    }
-
-    // ===== Điểm xanh (mana) =====
-    private static class Point {
-        int x, y;
-        Point(int x, int y) { this.x = x; this.y = y; }
-    }
-
-    private void updatePointsAndLevelUpIfNeeded() {
-        // Dùng player rect ở toạ độ thế giới
-        Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
-
-        for (int i = points.size() - 1; i >= 0; i--) {
-            Point p = points.get(i);
-
-            Rect pointRect = new Rect(p.x - 10, p.y - 10, p.x + 10, p.y + 10);
-            if (Rect.intersects(playerRect, pointRect)) {
-                points.remove(i);
-                mana += 1;
-
-                // Nâng cấp kiếm khi đủ mana
-                if (mana >= maxMana && swords.size() < MAX_SWORDS) {
-                    mana = 0;
-                    swords.add(new Sword(0));
-                    // sắp đều góc
-                    int n = swords.size();
-                    for (int j = 0; j < n; j++) {
-                        float step = 360f / n;
-                        swords.get(j).baseAngle = j * step;
-                    }
-                    // tăng max mana 10% tới trần 300
-                    maxMana = (int) Math.min(300, maxMana * 1.1);
-                }
-
-                // Sinh lại 1 điểm mới ngẫu nhiên
-                int x = random.nextInt(mapWidth - 40) + 20;
-                int y = random.nextInt(mapHeight - 40) + 20;
-                points.add(new Point(x, y));
-            }
         }
     }
 
@@ -375,33 +378,26 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         paint.setColor(Color.BLUE);
         for (int i = 0; i < points.size(); i++) {
             Point p = points.get(i);
-            float sx = p.x - cameraX;
-            float sy = p.y - cameraY;
+            float sx = p.x - cameraX, sy = p.y - cameraY;
             canvas.drawCircle(sx, sy, 10f, paint);
         }
     }
 
-    private void drawManaBar(Canvas canvas) {
-        Paint manaPaint = new Paint();
-        manaPaint.setColor(Color.BLUE);
+    private void drawHud(Canvas canvas) {
+        int w = (int) (getWidth() * 0.3f);
+        drawBar(canvas, 10, 10,  w, 24, player.getMana(),  player.getMaxMana(), 0xFF1E88E5, "Mana");
+        drawBar(canvas, 10, 44,  w, 24, player.getHp(),    player.getMaxHp(),   0xFFE53935, "HP");
+        drawBar(canvas, 10, 78,  w, 24, player.getEnergy(),player.getMaxEnergy(),0xFF43A047, "Energy");
+    }
 
-        float w = getWidth() * 0.3f;
-        float h = 30f;
-        float x = 10f, y = 10f;
-
-        // nền
-        Paint bg = new Paint();
-        bg.setColor(Color.GRAY);
-        canvas.drawRect(x, y, x + w, y + h, bg);
-
-        // fill theo mana
-        float fill = (mana / (float) maxMana) * w;
-        canvas.drawRect(x, y, x + fill, y + h, manaPaint);
-
-        // text
-        Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
-        t.setColor(Color.WHITE);
-        t.setTextSize(20f);
-        canvas.drawText("Mana: " + mana + "/" + maxMana, x, y + h + 25f, t);
+    private void drawBar(Canvas c, int x, int y, int w, int h, int value, int max, int color, String label) {
+        Paint bg = new Paint(); bg.setColor(0xFF333333);
+        c.drawRect(x, y, x+w, y+h, bg);
+        float ratio = Math.max(0f, Math.min(1f, max == 0 ? 0f : (value / (float) max)));
+        Paint fill = new Paint(); fill.setColor(color);
+        c.drawRect(x, y, x + (int)(w * ratio), y + h, fill);
+        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        text.setColor(Color.WHITE); text.setTextSize(18f);
+        c.drawText(label + ": " + value + "/" + max, x, y + h + 20, text);
     }
 }

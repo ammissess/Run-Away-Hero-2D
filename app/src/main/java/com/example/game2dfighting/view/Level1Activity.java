@@ -1,17 +1,18 @@
 package com.example.game2dfighting.view;
 
-// Level1Activity.java
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.Button;
-import com.example.game2dfighting.R;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.game2dfighting.view.HomeActivity;
+import com.example.game2dfighting.R;
 import com.example.game2dfighting.ui.JoystickView;
 import com.example.game2dfighting.view.map.GameView;
 
@@ -26,7 +27,8 @@ public class Level1Activity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Fullscreen
+
+        // Fullscreen + immersive
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().getDecorView().setSystemUiVisibility(
@@ -38,7 +40,23 @@ public class Level1Activity extends AppCompatActivity {
 
         FrameLayout root = findViewById(R.id.level1_root);
 
+        // --- GameView ---
         gameView = new GameView(this);
+
+        // Khi player chết trong GameView -> quay về Home
+        gameView.setGameEventListener(() -> runOnUiThread(() -> {
+            // đảm bảo dừng game & đóng overlay
+            gameView.setPaused(true);
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            Intent i = new Intent(Level1Activity.this, HomeActivity.class);
+            // Xoá các activity phía trên Home nếu có
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(i);
+            finish();
+        }));
+
+        // --- Joystick ---
         joystickView = new JoystickView(this, (x, y) -> {
             if (!gameView.isPaused()) {
                 gameView.setMovingUp(y < -0.2f);
@@ -59,11 +77,11 @@ public class Level1Activity extends AppCompatActivity {
         jsParams.topMargin = getResources().getDisplayMetrics().heightPixels - 500;
         joystickView.setLayoutParams(jsParams);
 
-        // Thêm view game + joystick
+        // Thêm view game + joystick vào layout (GameView nằm dưới cùng)
         root.addView(gameView);
         root.addView(joystickView);
 
-        // Lấy UI overlay
+        // --- Overlay Pause ---
         pauseOverlay = findViewById(R.id.pause_overlay);
         btnPause = findViewById(R.id.btn_pause);
         btnResume = findViewById(R.id.btn_resume);
@@ -83,16 +101,24 @@ public class Level1Activity extends AppCompatActivity {
             gameView.setPaused(false);
         });
 
-        // Quit -> về Home (finish Level1)
-        btnQuit.setOnClickListener(v -> finish());
+        // Quit -> về Home
+        btnQuit.setOnClickListener(v -> {
+            Intent i = new Intent(Level1Activity.this, HomeActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(i);
+            finish();
+        });
 
-        // Back gesture: nếu đang chơi -> mở overlay; nếu đang pause -> thoát
+        // Back gesture: đang chơi -> pause; đang pause -> thoát về Home
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override public void handleOnBackPressed() {
                 if (!gameView.isPaused()) {
                     gameView.setPaused(true);
                     pauseOverlay.setVisibility(View.VISIBLE);
                 } else {
+                    Intent i = new Intent(Level1Activity.this, HomeActivity.class);
+                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(i);
                     finish();
                 }
             }
@@ -102,7 +128,7 @@ public class Level1Activity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
-        // Đi background thì pause + mở overlay
+        // Đi background thì tự pause + mở overlay
         if (!gameView.isPaused()) {
             gameView.setPaused(true);
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
