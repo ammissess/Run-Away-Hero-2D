@@ -7,6 +7,9 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import com.example.game2dfighting.lifecycle.JoystickView;
+import com.example.game2dfighting.view.GameView;
+
 public class MainActivity extends Activity {
     private GameView gameView;
     private JoystickView joystickView;

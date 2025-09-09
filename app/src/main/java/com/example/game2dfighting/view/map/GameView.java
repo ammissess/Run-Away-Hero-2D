@@ -1,4 +1,4 @@
-package com.example.game2dfighting;
+package com.example.game2dfighting.view;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -49,6 +49,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private int cameraX = 0;       // Góc trên bên trái của camera
     private int cameraY = 0;
 
+    // ==== Pause flag ====
+    private volatile boolean paused = false;
+
     public GameView(Context context) {
         super(context);
         holder = getHolder();
@@ -61,6 +64,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // Khởi tạo 1 thanh kiếm ban đầu
         swords.add(new Sword(0)); // Góc ban đầu 0 độ
+    }
+
+    // ====== Pause API ======
+    public void setPaused(boolean paused) {
+        this.paused = paused;
+        if (paused) {
+            // ngắt input ngay khi pause (tuỳ chọn)
+            movingUp = movingDown = movingLeft = movingRight = false;
+        }
+    }
+
+    public boolean isPaused() {
+        return paused;
     }
 
     @Override
@@ -98,7 +114,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         Log.d(TAG, "Surface destroyed");
         isRunning = false;
         try {
-            gameThread.join();
+            if (gameThread != null) {
+                gameThread.join();
+            }
         } catch (InterruptedException e) {
             Log.e(TAG, "Error stopping thread", e);
         }
@@ -114,25 +132,34 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
             long frameStart = System.currentTimeMillis();
 
-            // ===== Update vị trí player =====
-            if (movingUp) playerY -= moveSpeed;
-            if (movingDown) playerY += moveSpeed;
-            if (movingLeft) playerX -= moveSpeed;
-            if (movingRight) playerX += moveSpeed;
+            // ===== Update logic CHỈ khi KHÔNG pause =====
+            if (!paused) {
+                // Cập nhật vị trí player
+                if (movingUp) playerY -= moveSpeed;
+                if (movingDown) playerY += moveSpeed;
+                if (movingLeft) playerX -= moveSpeed;
+                if (movingRight) playerX += moveSpeed;
 
-            // Giới hạn nhân vật trong bản đồ
-            if (playerX < 0) playerX = 0;
-            if (playerY < 0) playerY = 0;
-            if (playerX + playerWidth > mapWidth) playerX = mapWidth - playerWidth;
-            if (playerY + playerHeight > mapHeight) playerY = mapHeight - playerHeight;
+                // Giới hạn nhân vật trong bản đồ
+                if (playerX < 0) playerX = 0;
+                if (playerY < 0) playerY = 0;
+                if (playerX + playerWidth > mapWidth) playerX = mapWidth - playerWidth;
+                if (playerY + playerHeight > mapHeight) playerY = mapHeight - playerHeight;
 
-            // Cập nhật camera
-            cameraX = playerX + playerWidth / 2 - getWidth() / 2;
-            cameraY = playerY + playerHeight / 2 - getHeight() / 2;
-            if (cameraX < 0) cameraX = 0;
-            if (cameraY < 0) cameraY = 0;
-            cameraX = Math.min(cameraX, Math.max(0, mapWidth - getWidth()));
-            cameraY = Math.min(cameraY, Math.max(0, mapHeight - getHeight()));
+                // Cập nhật camera
+                cameraX = playerX + playerWidth / 2 - getWidth() / 2;
+                cameraY = playerY + playerHeight / 2 - getHeight() / 2;
+                if (cameraX < 0) cameraX = 0;
+                if (cameraY < 0) cameraY = 0;
+                cameraX = Math.min(cameraX, Math.max(0, mapWidth - getWidth()));
+                cameraY = Math.min(cameraY, Math.max(0, mapHeight - getHeight()));
+
+                // Quay kiếm
+                angle += 3f;
+                if (angle >= 360f) angle -= 360f;
+            } else {
+                // Khi pause: vẫn giữ camera bám vị trí hiện tại (không cần cập nhật)
+            }
 
             Canvas canvas = holder.lockCanvas();
             if (canvas != null) {
@@ -155,11 +182,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     paint.setStyle(Paint.Style.FILL);
                     canvas.drawRect(playerRect, paint);
 
-                    // Vẽ thanh kiếm
+                    // Vẽ thanh kiếm (dùng góc hiện tại; khi pause góc không tăng)
                     drawSwords(canvas, drawPlayerX, drawPlayerY);
 
-                    // Vẽ chấm xanh + xử lý va chạm
-                    checkCollisionsAndDrawPoints(canvas);
+                    // Vẽ chấm xanh
+                    if (!paused) {
+                        // Khi không pause: vẽ + xử lý va chạm (có thể thêm/sửa điểm, tăng mana)
+                        checkCollisionsAndDrawPoints(canvas);
+                    } else {
+                        // Khi đang pause: chỉ vẽ điểm, KHÔNG va chạm/biến đổi state
+                        drawPointsOnly(canvas);
+                    }
 
                     // Vẽ thanh mana
                     drawManaBar(canvas);
@@ -175,9 +208,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     canvas.drawRect(left, top, right, bottom, paint);
                     paint.setStyle(Paint.Style.FILL);
 
-                    // Quay các thanh kiếm
-                    angle += 3f;
-                    if (angle >= 360f) angle -= 360f;
+                    // Overlay "PAUSED"
+                    if (paused) {
+                        Paint dim = new Paint();
+                        dim.setColor(Color.argb(120, 0, 0, 0));
+                        canvas.drawRect(0, 0, getWidth(), getHeight(), dim);
+
+                        Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
+                        t.setColor(Color.WHITE);
+                        t.setTextSize(64f);
+                        t.setTextAlign(Paint.Align.CENTER);
+                        canvas.drawText("PAUSED", getWidth() / 2f, getHeight() / 2f, t);
+                    }
+
                 } finally {
                     holder.unlockCanvasAndPost(canvas);
                 }
@@ -192,6 +235,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    // ====== Điều khiển ======
     public void setMovingUp(boolean moving) { this.movingUp = moving; }
     public void setMovingDown(boolean moving) { this.movingDown = moving; }
     public void setMovingLeft(boolean moving) { this.movingLeft = moving; }
@@ -223,13 +267,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
-    // Lớp nội bộ cho thanh kiếm
+    // ====== Vẽ kiếm quay quanh nhân vật ======
     private class Sword {
         float baseAngle;
-
-        Sword(float baseAngle) {
-            this.baseAngle = baseAngle;
-        }
+        Sword(float baseAngle) { this.baseAngle = baseAngle; }
     }
 
     private void drawSwords(Canvas canvas, float drawPlayerX, float drawPlayerY) {
@@ -254,15 +295,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    // ====== Chấm điểm ======
     private class Point {
         int x, y;
-
-        Point(int x, int y) {
-            this.x = x;
-            this.y = y;
-        }
+        Point(int x, int y) { this.x = x; this.y = y; }
     }
 
+    // Vẽ + VA CHẠM (chỉ dùng khi không pause)
     private void checkCollisionsAndDrawPoints(Canvas canvas) {
         paint.setColor(Color.BLUE);
 
@@ -296,7 +335,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                         swords.get(j).baseAngle = j * angleStep;
                     }
 
-                    // Tăng giới hạn mana lên 10% của giá trị ban đầu (30), tối đa 300
+                    // Tăng giới hạn mana lên 10% (giới hạn tối đa 300)
                     maxMana = (int) Math.min(300, maxMana * 1.1);
                 }
 
@@ -308,6 +347,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    // Chỉ VẼ điểm (không va chạm) — dùng khi pause
+    private void drawPointsOnly(Canvas canvas) {
+        paint.setColor(Color.BLUE);
+        for (int i = 0; i < points.size(); i++) {
+            Point p = points.get(i);
+            float drawX = p.x - cameraX;
+            float drawY = p.y - cameraY;
+            canvas.drawCircle(drawX, drawY, 10f, paint);
+        }
+    }
+
+    // ====== Thanh mana ======
     private void drawManaBar(Canvas canvas) {
         Paint manaPaint = new Paint();
         manaPaint.setColor(Color.BLUE);
