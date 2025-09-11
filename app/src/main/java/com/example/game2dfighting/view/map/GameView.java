@@ -246,18 +246,20 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             float dx = e.x - player.centerX();
             float dy = e.y - player.centerY();
             float rr = e.radius + pr;
-            if (dx*dx + dy*dy <= rr*rr) {
+            if (dx * dx + dy * dy <= rr * rr) {
                 boolean dead = player.takeDamage(ENEMY_TOUCH_DAMAGE);
                 if (dead) {
-                    // Game Over -> báo cho Activity quay về Home
-                    if (listener != null) listener.onGameOver();
-                    // Dừng loop ngay để tránh tiếp tục xử lý khung hình
-                    setPaused(true);
-                    return;
+                    // Game Over: chuyển sang màn GameOverActivity
+                    if (listener != null) {
+                        listener.onGameOver();  // Gọi event game over
+                    }
+                    return;  // Kết thúc vòng lặp và game
                 }
             }
         }
     }
+
+
 
     private boolean circleVsSegment(float ex, float ey, float r,
                                     float ax, float ay, float bx, float by,
@@ -354,7 +356,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             t.setColor(Color.WHITE);
             t.setTextSize(64f);
             t.setTextAlign(Paint.Align.CENTER);
-            canvas.drawText("PAUSED", getWidth()/2f, getHeight()/2f, t);
+            // Vẽ chữ PAUSED ở giữa màn hình
+            float centerX = getWidth() / 2f;
+            float centerY = getHeight() / 2f;
+            canvas.drawText("RESUME", centerX, centerY, t);
+
+            // Vẽ chữ QUIT bên dưới
+            canvas.drawText("QUIT", centerX, centerY + 100, t);
         }
     }
 

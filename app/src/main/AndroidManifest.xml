@@ -30,6 +30,11 @@
         <activity
             android:name=".view.Level1Activity"
             android:exported="false" />
+
+        <activity
+            android:name=".view.GameOverActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>

@@ -4,6 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Ảnh nền cover -->
     <ImageView
         android:id="@+id/cover_image"
         android:layout_width="match_parent"
@@ -11,6 +12,39 @@
         android:scaleType="centerCrop"
         android:src="@drawable/cover" />
 
+    <!-- Nội dung phía trước -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp">
+
+        <!-- Logo game -->
+        <ImageView
+            android:id="@+id/game_logo"
+            android:layout_width="207dp"
+            android:layout_height="227dp"
+            android:layout_marginBottom="16dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/ic_logo_game" />
+
+        <!-- Tên game -->
+        <TextView
+            android:id="@+id/game_title"
+            android:layout_width="wrap_content"
+            android:layout_height="85dp"
+            android:shadowColor="#80000000"
+            android:shadowDx="2"
+            android:shadowDy="2"
+            android:shadowRadius="4"
+            android:text="RUN HERO"
+            android:textColor="@android:color/white"
+            android:textSize="36sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Nút PLAY -->
     <Button
         android:id="@+id/play_button"
         android:layout_width="220dp"

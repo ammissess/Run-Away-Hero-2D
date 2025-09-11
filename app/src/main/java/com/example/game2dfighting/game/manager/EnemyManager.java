@@ -15,7 +15,7 @@ public class EnemyManager {
     private final int mapW, mapH;
     private long lastSpawn = 0L;
 
-    public int maxEnemies = 30;
+    public int maxEnemies = 50;
     public long spawnIntervalMs = 800;
 
     public EnemyManager(int mapW, int mapH) { this.mapW = mapW; this.mapH = mapH; }

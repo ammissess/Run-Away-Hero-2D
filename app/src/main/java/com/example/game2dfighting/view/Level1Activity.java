@@ -21,6 +21,8 @@ public class Level1Activity extends AppCompatActivity {
     private JoystickView joystickView;
 
     private View pauseOverlay;
+
+
     private ImageButton btnPause;
     private Button btnResume, btnQuit;
 
@@ -43,18 +45,15 @@ public class Level1Activity extends AppCompatActivity {
         // --- GameView ---
         gameView = new GameView(this);
 
-        // Khi player chết trong GameView -> quay về Home
+        // Khi player chết trong GameView -> quay về GameOver
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
-            // đảm bảo dừng game & đóng overlay
-            gameView.setPaused(true);
-            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
-
-            Intent i = new Intent(Level1Activity.this, HomeActivity.class);
-            // Xoá các activity phía trên Home nếu có
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            // Khi game over, chuyển trực tiếp sang màn GameOver
+            Intent i = new Intent(Level1Activity.this, GameOverActivity.class);
             startActivity(i);
-            finish();
+            finish();  // Đảm bảo quay về HomeActivity
         }));
+
+
 
         // --- Joystick ---
         joystickView = new JoystickView(this, (x, y) -> {
@@ -134,4 +133,6 @@ public class Level1Activity extends AppCompatActivity {
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
         }
     }
+
+
 }
