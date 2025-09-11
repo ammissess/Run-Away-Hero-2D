@@ -81,7 +81,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private void initGame() {
-        player = new Player(100, 100, 100, 100);
+        int playerW = 100;
+        int playerH = 100;
+
+        // Tính toán để player xuất hiện giữa map
+        int startX = mapWidth / 2 - playerW / 2;
+        int startY = mapHeight / 2 - playerH / 2;
+
+        player = new Player(startX, startY, playerW, playerH);
         player.setMaxMana(10);  // như cũ
 
         swords.clear();
@@ -89,12 +96,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         enemyMgr = new EnemyManager(mapWidth, mapHeight);
 
-        // Tải hình nền và làm mờ
+        // Tải hình nền và scale cho vừa map
         Bitmap originalBackground = BitmapFactory.decodeResource(getResources(), R.drawable.glass2_background);
         background = Bitmap.createBitmap(mapWidth, mapHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(background);
         Paint paint = new Paint();
-        //paint.setAlpha(128); // Giảm độ trong suốt (0 - hoàn toàn trong suốt, 255 - không trong suốt), 128 là 50% mờ
         canvas.drawBitmap(Bitmap.createScaledBitmap(originalBackground, mapWidth, mapHeight, true), 0, 0, paint);
     }
 
