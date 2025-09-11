@@ -1,6 +1,8 @@
 package com.example.game2dfighting.view.map;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -10,6 +12,7 @@ import android.view.KeyEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.manager.EnemyManager;
@@ -58,6 +61,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private final int SWORD_DAMAGE = 10;   // mỗi lần kiếm quét trúng quái
     private final int ENEMY_TOUCH_DAMAGE = 5; // mỗi frame chạm player (đơn giản)
 
+
+    //Hinh nen
+    private Bitmap background;
+
+    //game over
+    // Thêm biến mới
+    private volatile boolean gameOver = false;
+
     public GameView(Context context) {
         super(context);
         holder = getHolder();
@@ -72,12 +83,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private void initGame() {
         player = new Player(100, 100, 100, 100);
         player.setMaxMana(10);  // như cũ
-        // player.setMaxHp(100); player.setMaxEnergy(100); // đã mặc định
 
         swords.clear();
         swords.add(new Sword(0));
 
         enemyMgr = new EnemyManager(mapWidth, mapHeight);
+
+        // Tải hình nền và làm mờ
+        Bitmap originalBackground = BitmapFactory.decodeResource(getResources(), R.drawable.glass2_background);
+        background = Bitmap.createBitmap(mapWidth, mapHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(background);
+        Paint paint = new Paint();
+        //paint.setAlpha(128); // Giảm độ trong suốt (0 - hoàn toàn trong suốt, 255 - không trong suốt), 128 là 50% mờ
+        canvas.drawBitmap(Bitmap.createScaledBitmap(originalBackground, mapWidth, mapHeight, true), 0, 0, paint);
     }
 
     // ===== Pause API =====
@@ -116,13 +134,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     // ===== Loop =====
-    @Override public void run() {
+    @Override
+    public void run() {
         while (isRunning) {
             if (holder == null || !holder.getSurface().isValid()) { sleep(16); continue; }
 
             long frameStart = System.currentTimeMillis();
 
-            if (!paused) {
+            if (!paused && !gameOver) { // Chỉ cập nhật khi chưa paused và chưa game over
                 // input -> player
                 player.up = movingUp; player.down = movingDown; player.left = movingLeft; player.right = movingRight;
 
@@ -162,6 +181,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
             long dt = System.currentTimeMillis() - frameStart;
             long sleep = 16 - dt; if (sleep > 0) sleep(sleep);
+
+            // Nếu game over, dừng vòng lặp
+            if (gameOver) {
+                isRunning = false;
+            }
         }
     }
 
@@ -249,11 +273,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             if (dx * dx + dy * dy <= rr * rr) {
                 boolean dead = player.takeDamage(ENEMY_TOUCH_DAMAGE);
                 if (dead) {
-                    // Game Over: chuyển sang màn GameOverActivity
+                    gameOver = true; // Đánh dấu game over
                     if (listener != null) {
-                        listener.onGameOver();  // Gọi event game over
+                        listener.onGameOver(); // Gọi event game over
                     }
-                    return;  // Kết thúc vòng lặp và game
+                    return; // Thoát khỏi phương thức để dừng vòng lặp
                 }
             }
         }
@@ -312,14 +336,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     // ===== Render =====
     private void render(Canvas canvas) {
-        // nền trắng
-        canvas.drawColor(Color.WHITE);
+        // Vẽ hình nền
+        canvas.drawBitmap(background, -cameraX, -cameraY, null);
 
-        // map nền
-        Paint mapBg = new Paint();
-        mapBg.setStyle(Paint.Style.FILL);
-        mapBg.setColor(Color.rgb(240, 240, 240));
-        canvas.drawRect(0 - cameraX, 0 - cameraY, mapWidth - cameraX, mapHeight - cameraY, mapBg);
+        // map nền (bỏ dòng canvas.drawColor(Color.WHITE) và mapBg)
+        // Paint mapBg = new Paint();
+        // mapBg.setStyle(Paint.Style.FILL);
+        // mapBg.setColor(Color.rgb(240, 240, 240));
+        // canvas.drawRect(0 - cameraX, 0 - cameraY, mapWidth - cameraX, mapHeight - cameraY, mapBg);
 
         // player (hình chữ nhật đỏ như trước)
         float drawPlayerX = player.x - cameraX, drawPlayerY = player.y - cameraY;
@@ -383,7 +407,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private void drawPoints(Canvas canvas) {
-        paint.setColor(Color.BLUE);
+        paint.setColor(Color.parseColor("#66FFFF"));
         for (int i = 0; i < points.size(); i++) {
             Point p = points.get(i);
             float sx = p.x - cameraX, sy = p.y - cameraY;
@@ -395,7 +419,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         int w = (int) (getWidth() * 0.3f);
         drawBar(canvas, 10, 10,  w, 24, player.getMana(),  player.getMaxMana(), 0xFF1E88E5, "Mana");
         drawBar(canvas, 10, 44,  w, 24, player.getHp(),    player.getMaxHp(),   0xFFE53935, "HP");
-        drawBar(canvas, 10, 78,  w, 24, player.getEnergy(),player.getMaxEnergy(),0xFF43A047, "Energy");
+        drawBar(canvas, 10, 78, w, 24, player.getEnergy(), player.getMaxEnergy(), 0xFFFFFF99, "Energy");
+
+
     }
 
     private void drawBar(Canvas c, int x, int y, int w, int h, int value, int max, int color, String label) {
