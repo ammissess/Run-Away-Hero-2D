@@ -188,7 +188,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         int startX = mapWidth / 2 - playerW / 2;
         int startY = mapHeight / 2 - playerH / 2;
         player = new Player(getContext(), startX, startY, playerW, playerH);
-        player.setMaxMana(10);
+        player.setMaxMana(0);
 
         // EnemyManager dùng kích thước map
         enemyMgr = new EnemyManager(getContext(), mapWidth, mapHeight);

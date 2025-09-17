@@ -22,20 +22,22 @@ public class EnemyManager {
     private long lastSpawn = 0L;
 
     // Giới hạn & tốc độ spawn
-    public int  maxEnemies       = 50;
+    public int  maxEnemies       = 15;
     public long spawnIntervalMs  = 800L;
-
-
+    private static final float STOP_GAP_PX = 20f; // quái dừng cách mép player 20 px
 
     // ====== Combat config ======
-    private static final int   ENEMY_DAMAGE           = 6;     // quái đánh người
-    private static final long  ENEMY_COOLDOWN_MS      = 700L;  // hồi đòn quái
-    private static final int   PLAYER_DAMAGE          = 12;    // người đánh quái (auto khi áp sát)
-    private static final long  PLAYER_COOLDOWN_MS     = 400L;  // hồi đòn người
-    private static final float ATTACK_RANGE_PADDING   = 12f;   // cộng thêm ngoài bán kính tiếp xúc
+    private static final int   ENEMY_DAMAGE           = 3;      // quái đánh người
+    private static final long  ENEMY_COOLDOWN_MS      = 1200L;  // hồi đòn quái
+    private static final int   PLAYER_DAMAGE          = 12;     // người đánh quái (auto khi áp sát)
+    private static final long  PLAYER_COOLDOWN_MS     = 400L;   // hồi đòn người
+    private static final float ATTACK_RANGE_PADDING   = 12f;    // cộng thêm ngoài bán kính tiếp xúc
 
     // HP quái (quản lý ở Manager để giữ nguyên Enemy.java)
     private static final int ENEMY_MAX_HP = 30;
+
+    private final Paint hpPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint hpBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     // Trạng thái combat
     private final Map<Enemy, Long>    nextEnemyAttackAtMs = new HashMap<>();
@@ -45,8 +47,8 @@ public class EnemyManager {
     // Vẽ (truyền cho GameObject.draw)
     private final Paint sharedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    // ... trong class EnemyManager
-    private static final float ENEMY_SCALE = 4f;   // gấp 3
+    // Scale enemy khi spawn
+    private static final float ENEMY_SCALE = 4f;
 
     // Kích thước sprite/quái khi spawn
     private final int enemyBaseW = 100;
@@ -54,12 +56,18 @@ public class EnemyManager {
     private int enemyW = Math.round(enemyBaseW * ENEMY_SCALE);
     private int enemyH = Math.round(enemyBaseH * ENEMY_SCALE);
 
-
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
         this.ctx = ctx;
         this.mapW = mapW;
         this.mapH = mapH;
+
+        // --- HP bar paints ---
+        hpPaint.setColor(0xFFFF0000);     // Đỏ
+        hpPaint.setStyle(Paint.Style.FILL);
+
+        hpBgPaint.setColor(0xFF555555);   // Xám nền
+        hpBgPaint.setStyle(Paint.Style.FILL);
     }
 
     // Tuỳ chọn: để không vỡ compile nếu nơi khác vẫn gọi ctor cũ
@@ -112,82 +120,9 @@ public class EnemyManager {
     }
 
     /**
-     * Cập nhật đuổi theo + tấn công (không dùng dt). Gọi mỗi frame trong GameView.
+     * Cập nhật đuổi theo + tấn công (bản có dtMs).
      * - Quái áp sát → đánh người (cooldown riêng từng quái)
      * - Người áp sát → tự đánh quái (cooldown chung)
-     */
-    public void updateTowardsPlayer(Player p) {
-        long now = System.currentTimeMillis();
-
-        for (int i = enemies.size() - 1; i >= 0; i--) {
-            Enemy e = enemies.get(i);
-
-            // Đảm bảo đã có HP & cooldown
-            if (!enemyHp.containsKey(e))             enemyHp.put(e, ENEMY_MAX_HP);
-            if (!nextEnemyAttackAtMs.containsKey(e)) nextEnemyAttackAtMs.put(e, 0L);
-
-            // Di chuyển quái đuổi theo người + cập nhật anim/hướng
-            try {
-                e.pursue(p.x, p.y, 16L); // giả định ~60 FPS
-            } catch (Throwable ignore) {
-                // fallback chase đơn giản nếu pursue không khả dụng
-                float ecx = e.x + e.w / 2f, ecy = e.y + e.h / 2f;
-                float pcx = p.x + p.w / 2f, pcy = p.y + p.h / 2f;
-                float dx  = pcx - ecx,      dy  = pcy - ecy;
-                float len = (float) Math.sqrt(dx * dx + dy * dy);
-                if (len > 1e-4f) {
-                    float step = 3f;
-                    e.x += (int) (dx / len * step);
-                    e.y += (int) (dy / len * step);
-                }
-            }
-
-            // Tính tầm đánh dựa trên "bán kính" hộp va chạm
-            float enemyRadius  = Math.min(e.w, p.h) / 2f; // e.h mới đúng, nhưng vẫn ổn nếu sprite vuông
-            float playerRadius = Math.min(p.w, p.h) / 2f;
-            float trigger      = enemyRadius + playerRadius + ATTACK_RANGE_PADDING;
-
-            float ddx   = (p.x + p.w / 2f) - (e.x + e.w / 2f);
-            float ddy   = (p.y + p.h / 2f) - (e.y + e.h / 2f);
-            float dist2 = ddx * ddx + ddy * ddy;
-
-            if (dist2 <= trigger * trigger) {
-                // ===== Quái -> Người =====
-                long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
-                if (now >= readyAt) {
-                    try { e.startAttack(); } catch (Throwable ignore) {}
-                    boolean playerDead = safeTakeDamage(p, ENEMY_DAMAGE);
-                    nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
-                    if (playerDead) {
-                        // Game over do GameView xử lý
-                    }
-                }
-
-                // ===== Người -> Quái (auto) =====
-                if (now >= nextPlayerAttackAtMs) {
-                    int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
-                    hp = Math.max(0, hp - PLAYER_DAMAGE);
-                    enemyHp.put(e, hp);
-                    nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
-
-                    if (hp == 0) {
-                        try { e.onDie(); } catch (Throwable ignore) {}
-                        enemies.remove(i);
-                        enemyHp.remove(e);
-                        nextEnemyAttackAtMs.remove(e);
-                        continue; // sang quái kế tiếp
-                    }
-                }
-            }
-        }
-
-        // Dọn rác nếu quái bị remove nơi khác
-        nextEnemyAttackAtMs.keySet().retainAll(enemies);
-        enemyHp.keySet().retainAll(enemies);
-    }
-
-    /**
-     * Bản có dtMs (nếu vòng lặp của bạn đã có delta-time).
      */
     public void updateTowardsPlayer(Player p, long dtMs) {
         long now = System.currentTimeMillis();
@@ -198,8 +133,10 @@ public class EnemyManager {
             if (!enemyHp.containsKey(e))             enemyHp.put(e, ENEMY_MAX_HP);
             if (!nextEnemyAttackAtMs.containsKey(e)) nextEnemyAttackAtMs.put(e, 0L);
 
+            // Pursue (Enemy.pursue đã tự chặn nếu đang DIE)
             try { e.pursue(p.x, p.y, dtMs); }
             catch (Throwable ignore) {
+                // Fallback di chuyển đơn giản
                 float ecx = e.x + e.w / 2f, ecy = e.y + e.h / 2f;
                 float pcx = p.x + p.w / 2f, pcy = p.y + p.h / 2f;
                 float dx  = pcx - ecx,      dy  = pcy - ecy;
@@ -211,6 +148,7 @@ public class EnemyManager {
                 }
             }
 
+            // --- Combat trigger ---
             float enemyRadius  = Math.min(e.w, e.h) / 2f;
             float playerRadius = Math.min(p.w, p.h) / 2f;
             float trigger      = enemyRadius + playerRadius + ATTACK_RANGE_PADDING;
@@ -220,33 +158,58 @@ public class EnemyManager {
             float dist2 = ddx * ddx + ddy * ddy;
 
             if (dist2 <= trigger * trigger) {
-                long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
-                if (now >= readyAt) {
-                    try { e.startAttack(); } catch (Throwable ignore) {}
-                    boolean playerDead = safeTakeDamage(p, ENEMY_DAMAGE);
-                    nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
-                    if (playerDead) { /* GameView xử lý */ }
-                }
 
-                if (now >= nextPlayerAttackAtMs) {
-                    int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
-                    hp = Math.max(0, hp - PLAYER_DAMAGE);
-                    enemyHp.put(e, hp);
-                    nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
+                // NEW: bỏ qua toàn bộ combat với quái đã DIE
+                boolean enemyIsDying = false;
+                try {
+                    enemyIsDying = (e.getState().toString().equals("DIE"));
+                } catch (Throwable ignore) { /* nếu không có API state thì coi như chưa chết */ }
 
-                    if (hp == 0) {
-                        try { e.onDie(); } catch (Throwable ignore) {}
-                        enemies.remove(i);
-                        enemyHp.remove(e);
-                        nextEnemyAttackAtMs.remove(e);
-                        continue;
+                if (!enemyIsDying) {
+                    // Enemy -> Player
+                    long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
+                    if (now >= readyAt) {
+                        try { e.startAttack(); } catch (Throwable ignore) {}
+                        boolean playerDead = safeTakeDamage(p, ENEMY_DAMAGE);
+                        nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
+                        if (playerDead) { /* GameView xử lý */ }
+                    }
+
+                    // Player -> Enemy
+                    if (now >= nextPlayerAttackAtMs) {
+                        try { p.startAttack(); } catch (Throwable ignore) {}
+
+                        int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
+                        hp = Math.max(0, hp - PLAYER_DAMAGE);
+                        enemyHp.put(e, hp);
+
+                        // Cooldown đánh của Player (có thể thay bằng p.getAttackDurationMs())
+                        nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
+
+                        if (hp == 0) {
+                            try { e.onDie(); } catch (Throwable ignore) {}
+                            // KHÔNG remove ngay – sẽ quét dọn ở dưới sau khi anim DIE xong
+                        }
                     }
                 }
             }
         }
 
+        // Giữ map đồng bộ với danh sách hiện hành
         nextEnemyAttackAtMs.keySet().retainAll(enemies);
         enemyHp.keySet().retainAll(enemies);
+
+        // NEW: Quét dọn quái đã kết thúc animation DIE
+        for (int i = enemies.size() - 1; i >= 0; i--) {
+            Enemy e = enemies.get(i);
+            boolean dieState = false;
+            try { dieState = e.getState().toString().equals("DIE"); } catch (Throwable ignore) {}
+            if (dieState && e.isDieAnimDone()) {
+                enemies.remove(i);
+                enemyHp.remove(e);
+                nextEnemyAttackAtMs.remove(e);
+            }
+        }
     }
 
     private boolean safeTakeDamage(Player p, int dmg) {
@@ -258,10 +221,52 @@ public class EnemyManager {
         }
     }
 
-    /** Vẽ quái (GameObject.draw tự trừ camera). */
+    public void applyBulletHit(Enemy e, int dmg){
+        Integer hp = enemyHp.get(e);
+        if (hp == null) return;
+        hp -= dmg;
+        if (hp <= 0){
+            enemyHp.put(e, 0);
+            e.onDie(); // đã có trong Enemy
+        } else {
+            enemyHp.put(e, hp);
+            // nếu có trạng thái HURT trong Enemy, bạn có thể gọi e.hurt() (nếu đã định nghĩa)
+            //try { e.hurt(); } catch (Throwable ignore) {}
+        }
+    }
+
+
+    /** Vẽ quái + thanh máu dựa trên kích thước sprite thật */
     public void draw(Canvas c, int cameraX, int cameraY) {
         for (Enemy e : enemies) {
+            // Vẽ sprite quái
             e.draw(c, cameraX, cameraY, sharedPaint);
+
+            // --- Tính kích thước/tham số thanh máu theo sprite thật ---
+            final int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
+            final float ratio = Math.max(0f, Math.min(1f, (float) hp / ENEMY_MAX_HP));
+
+            // Kích thước sprite gốc (không scale)
+            final float sprW = e.getSpriteW();
+            final float sprH = e.getSpriteH();
+
+            // NOTE: Nếu anim đang scale hiển thị khác, bạn có thể thay bằng kích thước hiển thị thực tế
+            final float barW = sprW - 150f; // chỉnh theo nhu cầu
+            final float barH = 8f;
+            final float gapY = -150f;
+
+            // Toạ độ đã trừ camera
+            final float screenX = e.x - cameraX;
+            final float screenY = e.y - cameraY;
+
+            // Canh giữa thanh máu với sprite bên trong bounding box
+            final float barX = screenX + (e.w - barW) / 2f;
+            final float barY = screenY - gapY - barH;
+
+            // Nền xám
+            c.drawRect(barX, barY, barX + barW, barY + barH, hpBgPaint);
+            // Máu đỏ còn lại
+            c.drawRect(barX, barY, barX + barW * ratio, barY + barH, hpPaint);
         }
     }
 }
