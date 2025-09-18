@@ -11,14 +11,18 @@ import android.graphics.Typeface;
 import java.util.Locale;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Player;
+import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.manager.EnemyManager;
+import com.example.game2dfighting.game.projectile.Bullet;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class GameView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
@@ -27,10 +31,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Thread gameThread;
     private volatile boolean isRunning = false;
 
-    // Map & Camera
+    // Map (ISLAND) & Sky & Camera (camera đang ở HỆ SKY)
     private int mapWidth, mapHeight;
-
-    // CAMERA ở HỆ SKY
     private int cameraX = 0, cameraY = 0;
 
     // Entities
@@ -58,18 +60,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     // ===== Parallax background =====
     private Bitmap bmpSky, bmpIsland, bmpCloud;
     private int skyW, skyH;            // kích thước sky đã scale
-    private int islandX, islandY;      // toạ độ đặt đảo ở GIỮA sky (tọa độ thế giới SKY)
+    private int islandX, islandY;      // toạ độ đảo bên trong SKY (offset từ SKY → MAP)
 
-    // Nhiều mây hơn + nhanh hơn
+    // Mây
     private final ArrayList<Cloud> clouds = new ArrayList<>();
     private static class Cloud {
-        float x, y;      // vị trí trong hệ SKY
-        float v;         // px/frame (tốc độ trôi)
-        float scale;     // 0.5..1.6 => kích thước mây
-        float alpha;     // 0.30..1.0 => độ mờ (xa thì mờ)
-        float parallax;  // 0.10..0.38 => lớp xa-gần
-        int   w, h;      // kích thước vẽ sau scale (để wrap)
-
+        float x, y; float v; float scale; float alpha; float parallax; int w, h;
         Cloud(float x, float y, float v, float scale, float alpha, float parallax, int baseW, int baseH) {
             this.x = x; this.y = y; this.v = v;
             this.scale = scale; this.alpha = alpha; this.parallax = parallax;
@@ -79,16 +75,27 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     // --- TIMER HUD ---
-    private long timerStartMs = 0L;        // thời điểm bắt đầu Level
-    private long pausedAccumulatedMs = 0L; // tổng thời gian đã pause
-    private long pauseStartMs = 0L;        // thời điểm bắt đầu pause
-    private boolean timerPaused = false;   // cờ đang pause hay không
-
+    private long timerStartMs = 0L;
+    private long pausedAccumulatedMs = 0L;
+    private long pauseStartMs = 0L;
+    private boolean timerPaused = false;
     private final Paint timePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint timeBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     // game over
     private volatile boolean gameOver = false;
+
+    // ================== BẮN ĐẠN ==================
+    private final List<Bullet> bullets = new ArrayList<>();
+    private long nextShootAtMs = 0L;
+    private static final long SHOOT_COOLDOWN_MS = 250L;
+
+    // Nút bắn & nút pause (UI screen space)
+    private Rect fireBtnRect;
+    private float fireBtnRadiusPx;
+
+    private Rect pauseBtnRect;
+    private float pauseBtnRadiusPx;
 
     public GameView(Context context) {
         super(context);
@@ -201,7 +208,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         skyH = Math.max(mapHeight + skyMargin*2, (int)(viewH * 1.5f));
         bmpSky = Bitmap.createScaledBitmap(srcSky, skyW, skyH, false);
 
-        // Tọa độ đặt đảo GIỮA sky (đảo nằm trong không trung)
+        // Tọa độ đặt đảo GIỮA sky
         islandX = (skyW - mapWidth) / 2;
         islandY = (skyH - mapHeight) / 2;
 
@@ -210,31 +217,22 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         clouds.clear();
         Random r = new Random();
 
-        // Tăng số lượng mây & nhiều lớp cao độ
         int totalClouds = 150;
-        int rows = 8;         // nhiều dải cao độ
-
+        int rows = 8;
         int baseW = bmpCloud.getWidth();
         int baseH = bmpCloud.getHeight();
 
         for (int i = 0; i < totalClouds; i++) {
-            // dải cao độ + nhiễu
             float row = r.nextInt(rows);
             float bandTop = skyH * 0.14f;
             float bandStep = skyH * 0.09f;
             float y = bandTop + row * bandStep + r.nextFloat() * (bandStep * 0.6f);
-
-            // rải vị trí X toàn bầu trời
             float x = r.nextInt(skyW);
 
-            // độ sâu: xa thì nhỏ, mờ, chậm — gần thì to, rõ, nhanh
-            float depth = r.nextFloat(); // 0..1 (0 = xa nhất)
-
-            float parallax = 0.10f + depth * 0.28f;           // 0.10..0.38
-            float scale    = 0.50f + depth * 1.10f;           // 0.50..1.60
-            float alpha    = 0.30f + depth * 0.70f;           // 0.30..1.00
-
-            // TỐC ĐỘ NHANH HƠN: 1.2 .. ~6.2 px/frame (tùy depth) + chút random
+            float depth = r.nextFloat(); // 0..1
+            float parallax = 0.10f + depth * 0.28f;     // 0.10..0.38
+            float scale    = 0.50f + depth * 1.10f;     // 0.50..1.60
+            float alpha    = 0.30f + depth * 0.70f;     // 0.30..1.00
             float v        = 1.2f + depth * 4.2f + r.nextFloat() * 0.8f;
 
             clouds.add(new Cloud(x, y, v, scale, alpha, parallax, baseW, baseH));
@@ -250,10 +248,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
 
-        // === CAMERA ở HỆ SKY: nhìn vào player (đang ở map) + offset đảo ===
+        // === CAMERA ở HỆ SKY ===
         cameraX = (int)((player.centerX() + islandX) - getWidth()/2f);
         cameraY = (int)((player.centerY() + islandY) - getHeight()/2f);
         clampCamera();
+
+        // === Setup nút bắn + pause (UI screen space) ===
+        setupButtons(getWidth(), getHeight());
 
         if (!isRunning) {
             isRunning = true;
@@ -262,7 +263,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
-    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {}
+    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        setupButtons(width, height);
+    }
+
     @Override public void surfaceDestroyed(SurfaceHolder holder) {
         isRunning = false;
         try { if (gameThread != null) gameThread.join(); } catch (InterruptedException e) { Log.e(TAG, "stop", e); }
@@ -276,20 +280,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         while (isRunning) {
             if (holder == null || !holder.getSurface().isValid()) { sleep(16); continue; }
 
-            // Tính delta-time cho frame hiện tại
             long now  = System.currentTimeMillis();
             long dtMs = now - lastUpdateMs;
             lastUpdateMs = now;
             if (dtMs < 0)   dtMs = 0;
-            if (dtMs > 100) dtMs = 100; // clamp để tránh giật khi app bị treo tạm
+            if (dtMs > 100) dtMs = 100; // clamp
 
             if (!paused && !gameOver) {
 
                 // ==== UPDATE CLOUDS ====
                 for (Cloud c : clouds) {
-                    c.x += c.v; // trôi sang phải nhanh hơn
+                    c.x += c.v;
                     if (c.x > skyW + c.w) {
-                        // loop lại từ trái với một cao độ mới nhẹ để đỡ trùng lặp
                         c.x = -c.w;
                         c.y += (random.nextFloat() - 0.5f) * (skyH * 0.06f);
                         if (c.y < skyH * 0.12f) c.y = skyH * 0.12f;
@@ -303,11 +305,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 player.left = movingLeft;
                 player.right = movingRight;
 
-                // update player (dùng dtMs)
+                // update player (dtMs)
                 player.update(dtMs);
                 clampPlayerToMap();
 
-                // === camera follow ở HỆ SKY ===
+                // camera follow (HỆ SKY)
                 cameraX = (int)((player.centerX() + islandX) - getWidth()/2f);
                 cameraY = (int)((player.centerY() + islandY) - getHeight()/2f);
                 clampCamera();
@@ -315,6 +317,33 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 // enemies
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player, dtMs);
+
+                // ====== UPDATE BULLETS & COLLISION ======
+                float dtSec = dtMs / 1000f;
+                for (int i = bullets.size() - 1; i >= 0; i--) {
+                    Bullet b = bullets.get(i);
+                    b.update(dtSec);
+                    if (!b.alive) {
+                        bullets.remove(i);
+                        continue;
+                    }
+
+                    boolean hit = false;
+                    for (Enemy en : enemyMgr.list()) {
+                        try {
+                            if (en.getState() == Enemy.State.DIE) continue;
+                        } catch (Throwable ignore) {}
+                        if (b.hit(en)) {
+                            hit = true;
+                            enemyMgr.applyBulletHit(en, b.damage);
+                            break;
+                        }
+                    }
+                    if (hit) {
+                        b.alive = false;
+                        bullets.remove(i);
+                    }
+                }
 
                 if (player.getHp() <= 0) {
                     gameOver = true;
@@ -335,7 +364,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
             }
 
-            // điều tiết tốc độ ~60fps
+            // ~60fps
             long frameTime = System.currentTimeMillis() - now;
             long sleep = 16 - frameTime;
             if (sleep > 0) sleep(sleep);
@@ -346,7 +375,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignore) {} }
 
-    // ===== Input API =====
+    // ===== Input API (phím/joystick) =====
     public void setMovingUp(boolean v)    { movingUp = v; }
     public void setMovingDown(boolean v)  { movingDown = v; }
     public void setMovingLeft(boolean v)  { movingLeft = v; }
@@ -377,6 +406,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    // ===== TOUCH: Nút Pause + Nút bắn =====
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        final int action = event.getActionMasked();
+        final int index = event.getActionIndex();
+        final float tx = event.getX(index);
+        final float ty = event.getY(index);
+
+        switch (action) {
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_POINTER_DOWN: {
+                // 1) Pause (trên-phải)
+                if (isInPauseButton(tx, ty)) {
+                    setPaused(!isPaused());
+                    return true;
+                }
+                // 2) Fire (dưới-phải)
+                if (isInFireButton(tx, ty)) {
+                    tryShootAtNearestEnemy();
+                    return true;
+                }
+                // 3) Joystick / input khác của bạn để dưới đây nếu có
+                break;
+            }
+            // case MOVE/UP: phần joystick hiện có của bạn
+        }
+        return true;
+    }
+
     // ===== Update helpers =====
     private void clampPlayerToMap() {
         if (player.x < 0) player.x = 0;
@@ -404,11 +462,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             Rect pointRect = new Rect(p.x - 10, p.y - 10, p.x + 10, p.y + 10);
             if (Rect.intersects(playerRect, pointRect)) {
                 points.remove(i);
-
-                // tăng mana trong Player
                 player.addMana(1);
-
-                // spawn lại 1 điểm mới
                 int x = random.nextInt(mapWidth - 40) + 20;
                 int y = random.nextInt(mapHeight - 40) + 20;
                 points.add(new Point(x, y));
@@ -418,54 +472,44 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     // ===== Render =====
     private void render(Canvas canvas) {
-        // WORLD ORIGIN: (0,0) là góc trái trên của SKY
-
-        // === 1) SKY (nằm sau cùng) ===
-        float skyParallax = 0.2f; // parallax nhẹ cho nền trời lớn
+        // 1) SKY
+        float skyParallax = 0.2f;
         float skyDrawX = -cameraX * skyParallax;
         float skyDrawY = -cameraY * skyParallax;
         canvas.drawBitmap(bmpSky, skyDrawX, skyDrawY, null);
 
-        // === 2) CLOUDS (giữa Sky và Island) ===
-        // Vẽ theo parallax/alpha/scale riêng từng mây
+        // 2) CLOUDS
         for (Cloud c : clouds) {
             float drawX = c.x - cameraX * c.parallax;
             float drawY = c.y - cameraY * c.parallax;
-
-            int left = (int) drawX;
-            int top  = (int) drawY;
-            int right = left + c.w;
-            int bottom = top + c.h;
-
+            int left = (int) drawX, top = (int) drawY, right = left + c.w, bottom = top + c.h;
             int a = (int) (c.alpha * 255f);
             paint.setAlpha(a);
             canvas.drawBitmap(bmpCloud, null, new Rect(left, top, right, bottom), paint);
         }
-        // Khôi phục alpha cho các phần vẽ sau
         paint.setAlpha(255);
 
-        // === 3) ISLAND (map, che một phần mây) ===
+        // 3) ISLAND (map)
         float islandDrawX = islandX - cameraX;
         float islandDrawY = islandY - cameraY;
         canvas.drawBitmap(bmpIsland, islandDrawX, islandDrawY, null);
 
-        // === 4) ENTITIES trên đảo (ở HỆ MAP, nên trừ camera - island offset) ===
+        // 4) ENTITIES (MAP hệ → trừ (camera - island) khi vẽ)
         player.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
         enemyMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
 
-        // === 5) POINTS (chấm xanh) cũng theo map ===
+        // 5) BULLETS (MAP hệ)
+        for (Bullet b : bullets) {
+            b.draw(canvas, cameraX - islandX, cameraY - islandY);
+        }
+
+        // 6) POINTS (MAP hệ)
         drawPointsOnIsland(canvas);
 
-        // === 6) HUD, viền, overlay ===
+        // 7) HUD + Buttons
         drawHud(canvas);
-
-        // Viền map theo biên đảo (tuỳ thích)
-//        paint.setStyle(Paint.Style.STROKE);
-//        paint.setStrokeWidth(8f);
-//        paint.setColor(Color.BLACK);
-//        canvas.drawRect(islandDrawX, islandDrawY,
-//                islandDrawX + mapWidth, islandDrawY + mapHeight, paint);
-//        paint.setStyle(Paint.Style.FILL);
+        drawPauseButton(canvas);
+        drawFireButton(canvas);
 
         if (paused) {
             Paint dim = new Paint();
@@ -474,12 +518,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
             Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
             t.setColor(Color.WHITE);
-            t.setTextSize(64f);
+            t.setTextSize(128f);
             t.setTextAlign(Paint.Align.CENTER);
             float centerX = getWidth() / 2f;
             float centerY = getHeight() / 2f;
-            canvas.drawText("RESUME", centerX, centerY, t);
-            canvas.drawText("QUIT", centerX, centerY + 100, t);
+            canvas.drawText("PAUSE", centerX, centerY, t);
+            //canvas.drawText("QUIT", centerX, centerY + 100, t);
         }
     }
 
@@ -487,7 +531,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         paint.setColor(Color.parseColor("#66FFFF"));
         for (int i = 0; i < points.size(); i++) {
             Point p = points.get(i);
-            // p.x, p.y ở MAP → cộng island offset rồi trừ camera (hệ SKY)
             float sx = (p.x + islandX) - cameraX;
             float sy = (p.y + islandY) - cameraY;
             canvas.drawCircle(sx, sy, 10f, paint);
@@ -500,14 +543,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         drawBar(canvas, 10, 44,  w, 24, player.getHp(),    player.getMaxHp(),   0xFFE53935, "HP");
         drawBar(canvas, 10, 78,  w, 24, player.getEnergy(), player.getMaxEnergy(), 0xFFFFFF99, "Energy");
 
-        // --- DRAW TIMER (center-top) ---
+        // TIMER
         long now = System.currentTimeMillis();
         long elapsedMs = timerPaused
                 ? (pauseStartMs - timerStartMs - pausedAccumulatedMs)
                 : (now - timerStartMs - pausedAccumulatedMs);
-
         if (elapsedMs < 0) elapsedMs = 0;
-
         int totalSec = (int) (elapsedMs / 1000);
         int min = totalSec / 60;
         int sec = totalSec % 60;
@@ -519,15 +560,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         Paint.FontMetrics fm = timePaint.getFontMetrics();
         float textHeight = fm.bottom - fm.top;
 
-        float paddingX = 24f;
-        float paddingY = 12f;
+        float paddingX = 24f, paddingY = 12f;
         float rectLeft   = cx - textWidth / 2f - paddingX;
         float rectTop    = topPadding;
         float rectRight  = cx + textWidth / 2f + paddingX;
         float rectBottom = rectTop + textHeight + paddingY * 2f;
 
         canvas.drawRoundRect(rectLeft, rectTop, rectRight, rectBottom, 24f, 24f, timeBgPaint);
-
         float baselineY = rectTop + paddingY - fm.top;
         canvas.drawText(timeText, cx, baselineY, timePaint);
     }
@@ -541,5 +580,105 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
         text.setColor(Color.WHITE); text.setTextSize(18f);
         c.drawText(label + ": " + value + "/" + max, x, y + h + 20, text);
+    }
+
+    // ===== Buttons layout =====
+    private void setupButtons(int w, int h) {
+        int margin = (int) (16 * getResources().getDisplayMetrics().density);
+
+        // Fire bottom-right (đối diện joystick)
+        int fireSize = (int) (80 * getResources().getDisplayMetrics().density);
+        int fireLeft = w - margin - fireSize;
+        int fireTop  = h - margin - fireSize;
+        fireBtnRect = new Rect(fireLeft, fireTop, fireLeft + fireSize, fireTop + fireSize);
+        fireBtnRadiusPx = fireSize / 2f;
+
+        // Pause top-right
+        int pauseSize = (int) (64 * getResources().getDisplayMetrics().density);
+        int pauseLeft = w - margin - pauseSize;
+        int pauseTop  = margin;
+        pauseBtnRect = new Rect(pauseLeft, pauseTop, pauseLeft + pauseSize, pauseTop + pauseSize);
+        pauseBtnRadiusPx = pauseSize / 2f;
+    }
+
+    // ===== Fire button (UI) =====
+    private void drawFireButton(Canvas c) {
+        if (fireBtnRect == null) return;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // nền mờ
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(Color.argb(160, 255, 255, 255));
+        float cx = fireBtnRect.exactCenterX();
+        float cy = fireBtnRect.exactCenterY();
+        c.drawCircle(cx, cy, fireBtnRadiusPx, p);
+
+        // viền + icon đường thẳng (viên đạn)
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(6f);
+        p.setColor(Color.BLACK);
+        c.drawCircle(cx, cy, fireBtnRadiusPx, p);
+        c.drawLine(cx - fireBtnRadiusPx * 0.4f, cy,
+                cx + fireBtnRadiusPx * 0.4f, cy, p);
+    }
+
+    // ===== Pause button (UI) =====
+    private void drawPauseButton(Canvas c) {
+        if (pauseBtnRect == null) return;
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // nền tối
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(Color.argb(180, 0, 0, 0));
+        float cx = pauseBtnRect.exactCenterX();
+        float cy = pauseBtnRect.exactCenterY();
+        c.drawCircle(cx, cy, pauseBtnRadiusPx, p);
+
+        // icon ||
+        p.setStyle(Paint.Style.STROKE);
+        p.setStrokeWidth(6f);
+        p.setColor(Color.WHITE);
+        float barW = pauseBtnRadiusPx * 0.3f;
+        float barH = pauseBtnRadiusPx * 0.9f;
+        c.drawLine(cx - barW, cy - barH/2f, cx - barW, cy + barH/2f, p);
+        c.drawLine(cx + barW, cy - barH/2f, cx + barW, cy + barH/2f, p);
+    }
+
+    private boolean isInFireButton(float x, float y) {
+        return fireBtnRect != null && fireBtnRect.contains((int) x, (int) y);
+    }
+    private boolean isInPauseButton(float x, float y) {
+        return pauseBtnRect != null && pauseBtnRect.contains((int) x, (int) y);
+    }
+
+    private void tryShootAtNearestEnemy() {
+        long now = System.currentTimeMillis();
+        if (now < nextShootAtMs) return;
+        if (player == null || enemyMgr == null) return;
+
+        Enemy target = null;
+        float bestD2 = Float.MAX_VALUE;
+        float px = player.centerX();
+        float py = player.centerY();
+
+        for (Enemy en : enemyMgr.list()) {
+            try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+            float ex = en.x + en.w / 2f;
+            float ey = en.y + en.h / 2f;
+            float dx = ex - px, dy = ey - py;
+            float d2 = dx*dx + dy*dy;
+            if (d2 < bestD2) { bestD2 = d2; target = en; }
+        }
+
+        if (target != null) {
+            Bullet b = player.spawnBulletToward(
+                    target.x + target.w / 2f,
+                    target.y + target.h / 2f,
+                    mapWidth, mapHeight,
+                    getContext() // context cho sprite cầu lửa
+            );
+            bullets.add(b);
+            nextShootAtMs = now + SHOOT_COOLDOWN_MS;
+        }
     }
 }

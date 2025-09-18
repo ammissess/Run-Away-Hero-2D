@@ -173,32 +173,27 @@ public class Player extends GameObject {
         // KHÔNG khóa di chuyển
     }
 
-    public Bullet spawnBulletToward(float targetX, float targetY, int mapW, int mapH){
-        // tâm player
+    public Bullet spawnBulletToward(float targetX, float targetY, int mapW, int mapH, Context ctx){
         float px = this.x + this.w/2f;
         float py = this.y + this.h/2f;
 
-        // vector hướng
         float dx = targetX - px;
         float dy = targetY - py;
         float len = (float)Math.sqrt(dx*dx + dy*dy);
         if (len < 1f) len = 1f;
         dx /= len; dy /= len;
 
-        // tốc độ đạn
-        float speed = 900f; // px/s
+        float speed = 300f; // px/s
         float vx = dx * speed;
         float vy = dy * speed;
 
-        // offset ra phía trước 1 chút để không dính vào người
         float muzzle = Math.min(this.w, this.h) * 0.4f;
         float sx = px + dx * muzzle;
         float sy = py + dy * muzzle;
 
-        com.example.game2dfighting.game.projectile.Bullet b =
-                new com.example.game2dfighting.game.projectile.Bullet(sx, sy, vx, vy, mapW, mapH);
-        return b;
+        return new Bullet(sx, sy, vx, vy, mapW, mapH, ctx);
     }
+
 
 
     /**

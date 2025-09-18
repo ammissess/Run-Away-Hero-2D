@@ -22,7 +22,7 @@ public class EnemyManager {
     private long lastSpawn = 0L;
 
     // Giới hạn & tốc độ spawn
-    public int  maxEnemies       = 15;
+    public int  maxEnemies       = 5;
     public long spawnIntervalMs  = 800L;
     private static final float STOP_GAP_PX = 20f; // quái dừng cách mép player 20 px
 
@@ -77,6 +77,10 @@ public class EnemyManager {
 
     // ====== API ======
     public List<Enemy> list() { return enemies; }
+
+//    public List<Enemy> getEnemies() {
+//        return enemies;
+//    }
 
     /** Spawn ngẫu nhiên từ 4 cạnh map. */
     public void maybeSpawn() {
