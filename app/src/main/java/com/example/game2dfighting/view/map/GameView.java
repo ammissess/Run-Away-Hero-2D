@@ -14,6 +14,9 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
+
 
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Player;
@@ -96,6 +99,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private Rect pauseBtnRect;
     private float pauseBtnRadiusPx;
+
+    // ===== Audio (SFX) =====
+    private SoundPool soundPool;
+    private int sfxFireId = 0;
+    private boolean sfxLoaded = false;
+    private float sfxVolume = 1.0f; // 0..1
+    private int sfxPlayerHurtId = 0;
+    private int sfxWallId = 0;
+    // Footstep SFX
+    private int sfxRunStepId = 0;
+    private long nextRunStepAtMs = 0L;
+    private int  runStepIntervalMs = 220; // nhịp bước (ms), chỉnh nhanh/chậm tuỳ ý
+    private int  lastPX = Integer.MIN_VALUE, lastPY = Integer.MIN_VALUE; // theo dõi di chuyển thật
+
+    // Latch cạnh để chỉ phát âm khi vừa chạm (rising edge)
+    private boolean atLeftEdge = false, atRightEdge = false, atTopEdge = false, atBottomEdge = false;
+
+
 
     public GameView(Context context) {
         super(context);
@@ -184,6 +205,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     public void surfaceCreated(SurfaceHolder holder) {
         this.holder = holder;
 
+        initSound();  // load âm thanh bắn
+
+
         // === 2) ISLAND (map) – load TRƯỚC ===
         Bitmap srcIsland = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_island);
         bmpIsland = srcIsland; // có thể scale nếu muốn
@@ -199,6 +223,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // EnemyManager dùng kích thước map
         enemyMgr = new EnemyManager(getContext(), mapWidth, mapHeight);
+
+        enemyMgr.setCombatListener(new EnemyManager.CombatListener() {
+            @Override
+            public void onPlayerHit() {
+                playPlayerHurtSfx();
+            }
+        });
 
         // === 1) SKY – load SAU khi biết mapWidth/Height ===
         Bitmap srcSky = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_sky);
@@ -269,6 +300,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     @Override public void surfaceDestroyed(SurfaceHolder holder) {
         isRunning = false;
+        try {
+            if (soundPool != null) {
+                soundPool.release();
+                soundPool = null;
+                sfxLoaded = false;
+            }
+        } catch (Throwable ignore) {}
         try { if (gameThread != null) gameThread.join(); } catch (InterruptedException e) { Log.e(TAG, "stop", e); }
     }
 
@@ -308,6 +346,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 // update player (dtMs)
                 player.update(dtMs);
                 clampPlayerToMap();
+
+                /* ===== [SFX RUN STEP] Phát tiếng bước chân khi NHÂN VẬT đang DI CHUYỂN ===== */
+                boolean movedPixel = (player.x != lastPX) || (player.y != lastPY); // thật sự dịch chuyển?
+                long nowMs = System.currentTimeMillis();
+                if (movedPixel) {
+                    if (nowMs >= nextRunStepAtMs) {
+                        playRunStepSfx();
+                        nextRunStepAtMs = nowMs + runStepIntervalMs; // hẹn nhịp lần sau
+                    }
+                } else {
+                    // đứng yên thì reset để lần sau nhấn đi sẽ phát ngay
+                    nextRunStepAtMs = 0L;
+                }
+                lastPX = player.x; lastPY = player.y;
+                /* ===== [SFX RUN STEP] END ===== */
 
                 // camera follow (HỆ SKY)
                 cameraX = (int)((player.centerX() + islandX) - getWidth()/2f);
@@ -373,6 +426,31 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    private void initSound() {
+        try {
+            AudioAttributes aa = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build();
+            soundPool = new SoundPool.Builder()
+                    .setAudioAttributes(aa)
+                    .setMaxStreams(4) // bắn liên tục vẫn ổn
+                    .build();
+            sfxFireId = soundPool.load(getContext(), R.raw.fireball_shoot, 1);
+            sfxWallId = soundPool.load(getContext(), R.raw.wall_bump, 1);
+            sfxPlayerHurtId = soundPool.load(getContext(), R.raw.player_hurt, 1);
+            sfxRunStepId = soundPool.load(getContext(), R.raw.run_step1, 1);
+            soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
+                if (status == 0 && sampleId == sfxFireId) sfxLoaded = true;
+            });
+        } catch (Throwable t) {
+            Log.e(TAG, "initSound error", t);
+            soundPool = null;
+            sfxLoaded = false;
+        }
+    }
+
+
     private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignore) {} }
 
     // ===== Input API (phím/joystick) =====
@@ -437,11 +515,32 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     // ===== Update helpers =====
     private void clampPlayerToMap() {
+        boolean hitNowLeft   = (player.x <= 0);
+        boolean hitNowTop    = (player.y <= 0);
+        boolean hitNowRight  = (player.x + player.w >= mapWidth);
+        boolean hitNowBottom = (player.y + player.h >= mapHeight);
+
+        // Kẹp vào biên
         if (player.x < 0) player.x = 0;
         if (player.y < 0) player.y = 0;
         if (player.x + player.w > mapWidth)  player.x = mapWidth - player.w;
         if (player.y + player.h > mapHeight) player.y = mapHeight - player.h;
+
+        // Chỉ phát âm khi "vừa chạm" mép (từ false -> true)
+        if (hitNowLeft   && !atLeftEdge)   playWallSfx();
+        if (hitNowTop    && !atTopEdge)    playWallSfx();
+        if (hitNowRight  && !atRightEdge)  playWallSfx();
+        if (hitNowBottom && !atBottomEdge) playWallSfx();
+
+        // Cập nhật latch
+        atLeftEdge   = hitNowLeft;
+        atTopEdge    = hitNowTop;
+        atRightEdge  = hitNowRight;
+        atBottomEdge = hitNowBottom;
+
+        // Khi rời khỏi mép (di chuyển vào trong), latch sẽ tự về false
     }
+
 
     // KẸP CAMERA THEO BIÊN BẦU TRỜI (SKY)
     private void clampCamera() {
@@ -679,6 +778,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             );
             bullets.add(b);
             nextShootAtMs = now + SHOOT_COOLDOWN_MS;
+            playFireSfx();
+
         }
     }
+    private void playFireSfx() {
+        if (paused) return;           // đang pause thì không phát
+        if (soundPool == null) return;
+        if (!sfxLoaded) return;
+
+        // leftVol, rightVol, priority, loop(0=once), rate(0.5..2.0)
+        soundPool.play(sfxFireId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+    }
+
+    private void playWallSfx() {
+        if (paused) return;
+        if (soundPool == null || !sfxLoaded) return;
+        float vol = 0.9f; // nhẹ hơn tiếng bắn 1 chút
+        soundPool.play(sfxWallId, vol, vol, 1, 0, 1.0f);
+    }
+
+    private void playPlayerHurtSfx() {
+        if (paused || soundPool == null || !sfxLoaded) return;
+        soundPool.play(sfxPlayerHurtId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+    }
+
+    private void playRunStepSfx() {
+        if (paused || soundPool == null || !sfxLoaded) return;
+        float rate = 0.92f + (float)Math.random() * 0.16f; // biến tấu pitch cho tự nhiên
+        soundPool.play(sfxRunStepId, sfxVolume, sfxVolume, 1, 0, rate);
+    }
+
 }

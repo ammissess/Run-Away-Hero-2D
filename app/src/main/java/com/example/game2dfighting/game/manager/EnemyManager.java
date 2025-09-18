@@ -56,6 +56,14 @@ public class EnemyManager {
     private int enemyW = Math.round(enemyBaseW * ENEMY_SCALE);
     private int enemyH = Math.round(enemyBaseH * ENEMY_SCALE);
 
+    // ===== Combat listener =====
+    public interface CombatListener {
+        void onPlayerHit();  // quái đánh trúng người
+    }
+    private CombatListener combatListener = null;
+    public void setCombatListener(CombatListener l) { this.combatListener = l; }
+
+
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
         this.ctx = ctx;
@@ -175,6 +183,7 @@ public class EnemyManager {
                     if (now >= readyAt) {
                         try { e.startAttack(); } catch (Throwable ignore) {}
                         boolean playerDead = safeTakeDamage(p, ENEMY_DAMAGE);
+                        if (combatListener != null) combatListener.onPlayerHit();
                         nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
                         if (playerDead) { /* GameView xử lý */ }
                     }
