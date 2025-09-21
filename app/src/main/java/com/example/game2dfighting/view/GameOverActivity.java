@@ -2,6 +2,7 @@ package com.example.game2dfighting.view;
 
 import android.animation.ValueAnimator;
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.animation.LinearInterpolator;
 import android.widget.Button;
@@ -26,6 +27,9 @@ public class GameOverActivity extends AppCompatActivity {
     // Keep animators to pause/resume
     private final List<ValueAnimator> runningAnimators = new ArrayList<>();
 
+    // Music
+    private MediaPlayer mediaPlayer;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -36,12 +40,20 @@ public class GameOverActivity extends AppCompatActivity {
         btnQuit = findViewById(R.id.btn_quit);
 
         btnPlayAgain.setOnClickListener(v -> {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();
+                mediaPlayer.seekTo(0);
+            }
             Intent intent = new Intent(GameOverActivity.this, Level1Activity.class);
             startActivity(intent);
             finish();
         });
 
         btnQuit.setOnClickListener(v -> {
+            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+                mediaPlayer.pause();
+                mediaPlayer.seekTo(0);
+            }
             Intent intent = new Intent(GameOverActivity.this, HomeActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
@@ -56,16 +68,17 @@ public class GameOverActivity extends AppCompatActivity {
         cloudsNear1 = findViewById(R.id.clouds_near_1);
         cloudsNear2 = findViewById(R.id.clouds_near_2);
 
-        // Khởi tạo parallax sau khi view đã layout xong để lấy được width
-        // Dùng post() để đợi view đo xong
         if (cloudsFar1 != null) {
             cloudsFar1.post(this::startCloudAnimationsIfReady);
         }
+
+        // Nhạc nền (file bg_game_over đặt trong res/raw/)
+        mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_over);
+        mediaPlayer.setLooping(true);
+        mediaPlayer.setVolume(0f, 0f); // bắt đầu với âm lượng 0, fade-in trong onResume
     }
 
     private void startCloudAnimationsIfReady() {
-        // Tốc độ (px/giây) cho từng lớp: xa chậm, gần nhanh
-        // Bạn có thể tinh chỉnh số này cho mượt hơn
         float farSpeedPxPerSec  = 20f;
         float midSpeedPxPerSec  = 100f;
         float nearSpeedPxPerSec = 50f;
@@ -83,27 +96,18 @@ public class GameOverActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Tạo chuyển động lặp vô hạn: 2 ảnh song song trượt sang trái.
-     * i1 và i2 đặt cạnh nhau ảo bằng cách dùng translationX.
-     */
     private ValueAnimator startParallax(ImageView i1, ImageView i2, float pxPerSec) {
-        // Nếu width chưa sẵn sàng, gọi lại sau
         int w = i1.getWidth();
         if (w == 0 && i1.getDrawable() != null) {
             w = i1.getDrawable().getIntrinsicWidth();
         }
         if (w <= 0) {
-            // fallback: đợi thêm một frame
             i1.post(() -> startParallax(i1, i2, pxPerSec));
             return null;
         }
 
-        // Animator chạy từ 0 -> 1, lặp vô hạn, dùng để tính offset
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setInterpolator(new LinearInterpolator());
-
-        // Thời gian để trôi hết 1 chiều rộng ảnh
         long durationMs = (long) Math.max((w / pxPerSec) * 1000L, 1000L);
         animator.setDuration(durationMs);
         animator.setRepeatCount(ValueAnimator.INFINITE);
@@ -111,11 +115,9 @@ public class GameOverActivity extends AppCompatActivity {
         final int width = w;
 
         animator.addUpdateListener(a -> {
-            float t = (float) a.getAnimatedValue();   // 0..1
-            float dx = (t * width) % width;           // 0..width
-            // Ảnh 1 dịch trái từ 0 -> -width
+            float t = (float) a.getAnimatedValue();
+            float dx = (t * width) % width;
             i1.setTranslationX(-dx);
-            // Ảnh 2 nằm tiếp nối phía sau ảnh 1
             i2.setTranslationX(-dx + width);
         });
 
@@ -126,28 +128,57 @@ public class GameOverActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Resume lại animators nếu cần (ValueAnimator tự tiếp tục nếu activity không bị destroy)
+
         for (ValueAnimator va : runningAnimators) {
             if (va != null && !va.isRunning()) va.start();
+        }
+
+        if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+            mediaPlayer.start();
+            fadeIn(mediaPlayer, 600);
         }
     }
 
     @Override
     protected void onPause() {
-        super.onPause();
-        // Tạm dừng để tiết kiệm pin/cpu khi không hiển thị
+        // Dừng animators
         for (ValueAnimator va : runningAnimators) {
             if (va != null && va.isRunning()) va.pause();
         }
+
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            mediaPlayer.pause();
+        }
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Hủy để tránh memory leak
         for (ValueAnimator va : runningAnimators) {
             if (va != null) va.cancel();
         }
         runningAnimators.clear();
+
+        if (mediaPlayer != null) {
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+    }
+
+    // Hàm fade-in để tránh rè lúc đầu
+    private void fadeIn(MediaPlayer mp, int durationMs) {
+        final int steps = 20;
+        final float delta = 1.0f / steps;
+        final int stepDelay = Math.max(10, durationMs / steps);
+
+        mp.setVolume(0f, 0f);
+        final android.os.Handler h = new android.os.Handler();
+        for (int i = 1; i <= steps; i++) {
+            final float vol = delta * i;
+            h.postDelayed(() -> {
+                if (mp.isPlaying()) mp.setVolume(vol, vol);
+            }, (long) i * stepDelay);
+        }
     }
 }

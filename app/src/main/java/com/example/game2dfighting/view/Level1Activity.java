@@ -1,7 +1,9 @@
 package com.example.game2dfighting.view;
 
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -11,7 +13,6 @@ import android.widget.Button;
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.example.game2dfighting.view.HomeActivity;
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.ui.JoystickView;
 import com.example.game2dfighting.view.map.GameView;
@@ -21,10 +22,11 @@ public class Level1Activity extends AppCompatActivity {
     private JoystickView joystickView;
 
     private View pauseOverlay;
-
-
     private ImageButton btnPause;
     private Button btnResume, btnQuit;
+
+    // ===== Music =====
+    private MediaPlayer bgMusic;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,15 +47,14 @@ public class Level1Activity extends AppCompatActivity {
         // --- GameView ---
         gameView = new GameView(this);
 
-        // Khi player chết trong GameView -> quay về GameOver
+        // Khi player chết trong GameView -> sang GameOver
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
-            // Khi game over, chuyển trực tiếp sang màn GameOver
+            // dừng nhạc trước khi chuyển màn
+            stopAndRewindMusic();
             Intent i = new Intent(Level1Activity.this, GameOverActivity.class);
             startActivity(i);
-            finish();  // Đảm bảo quay về HomeActivity
+            finish();
         }));
-
-
 
         // --- Joystick ---
         joystickView = new JoystickView(this, (x, y) -> {
@@ -91,6 +92,9 @@ public class Level1Activity extends AppCompatActivity {
             if (!gameView.isPaused()) {
                 gameView.setPaused(true);
                 pauseOverlay.setVisibility(View.VISIBLE);
+                // (tùy chọn) fade-out nhẹ khi pause
+                // fadeOut(bgMusic, 250);
+                if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
             }
         });
 
@@ -98,10 +102,16 @@ public class Level1Activity extends AppCompatActivity {
         btnResume.setOnClickListener(v -> {
             pauseOverlay.setVisibility(View.GONE);
             gameView.setPaused(false);
+            // tiếp tục nhạc (fade-in cho mượt)
+            if (bgMusic != null && !bgMusic.isPlaying()) {
+                bgMusic.start();
+                fadeIn(bgMusic, 400);
+            }
         });
 
         // Quit -> về Home
         btnQuit.setOnClickListener(v -> {
+            stopAndRewindMusic();
             Intent i = new Intent(Level1Activity.this, HomeActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(i);
@@ -114,7 +124,9 @@ public class Level1Activity extends AppCompatActivity {
                 if (!gameView.isPaused()) {
                     gameView.setPaused(true);
                     pauseOverlay.setVisibility(View.VISIBLE);
+                    if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
                 } else {
+                    stopAndRewindMusic();
                     Intent i = new Intent(Level1Activity.this, HomeActivity.class);
                     i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                     startActivity(i);
@@ -122,17 +134,94 @@ public class Level1Activity extends AppCompatActivity {
                 }
             }
         });
+
+        // ===== Init music but DON'T start here (tránh rè lúc mới vào) =====
+        // Đặt file bg_level1.ogg/mp3 trong res/raw
+        bgMusic = MediaPlayer.create(this, R.raw.bg_game_level1);
+        bgMusic.setLooping(true);
+        bgMusic.setVolume(0f, 0f); // sẽ fade-in trong onResume()
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Nếu đang ở state pause overlay do onPause trước đó, giữ nguyên pause
+        if (!gameView.isPaused()) {
+            if (bgMusic != null && !bgMusic.isPlaying()) {
+                bgMusic.start();
+                fadeIn(bgMusic, 600); // 300–800ms tuỳ chỉnh
+            }
+        }
     }
 
     @Override
     protected void onPause() {
-        super.onPause();
         // Đi background thì tự pause + mở overlay
         if (!gameView.isPaused()) {
             gameView.setPaused(true);
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
         }
+        // Dừng nhạc TRƯỚC super.onPause()
+        if (bgMusic != null && bgMusic.isPlaying()) {
+            bgMusic.pause();
+        }
+        super.onPause();
     }
 
+    @Override
+    protected void onDestroy() {
+        // Giải phóng MediaPlayer
+        if (bgMusic != null) {
+            bgMusic.release();
+            bgMusic = null;
+        }
+        super.onDestroy();
+    }
 
+    /* ================== Helpers ================== */
+
+    private void stopAndRewindMusic() {
+        if (bgMusic != null && bgMusic.isPlaying()) {
+            bgMusic.pause();
+        }
+        if (bgMusic != null) bgMusic.seekTo(0);
+    }
+
+    // Fade-in volume đơn giản
+    private void fadeIn(MediaPlayer mp, int durationMs) {
+        if (mp == null) return;
+        final int steps = 20;
+        final float delta = 1.0f / steps;
+        final int stepDelay = Math.max(10, durationMs / steps);
+
+        mp.setVolume(0f, 0f);
+        Handler h = new Handler();
+        for (int i = 1; i <= steps; i++) {
+            final float vol = delta * i; // 0 -> 1
+            h.postDelayed(() -> {
+                if (mp != null && mp.isPlaying()) mp.setVolume(vol, vol);
+            }, (long) i * stepDelay);
+        }
+    }
+
+    // (tuỳ chọn) Fade-out nếu bạn muốn mượt khi pause/quit
+    @SuppressWarnings("unused")
+    private void fadeOut(MediaPlayer mp, int durationMs) {
+        if (mp == null) return;
+        final int steps = 20;
+        final float delta = 1.0f / steps;
+        final int stepDelay = Math.max(10, durationMs / steps);
+
+        Handler h = new Handler();
+        for (int i = 1; i <= steps; i++) {
+            final float vol = 1.0f - delta * i; // 1 -> 0
+            h.postDelayed(() -> {
+                if (mp != null) mp.setVolume(Math.max(0f, vol), Math.max(0f, vol));
+            }, (long) i * stepDelay);
+        }
+        h.postDelayed(() -> {
+            if (mp != null && mp.isPlaying()) mp.pause();
+            if (mp != null) mp.setVolume(1f, 1f); // reset cho lần phát sau
+        }, (long) (steps + 1) * stepDelay);
+    }
 }
