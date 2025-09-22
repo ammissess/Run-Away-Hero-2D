@@ -56,6 +56,18 @@ public class Level1Activity extends AppCompatActivity {
             finish();
         }));
 
+        // ===== KẾT NỐI TOGGLE ÂM NHẠC TỪ GAMEVIEW → ACTIVITY =====
+        gameView.setAudioControl(enabled -> {
+            if (bgMusic == null) return;
+            if (enabled) {
+                if (!bgMusic.isPlaying() && !gameView.isPaused()) {
+                    bgMusic.start();
+                }
+            } else {
+                if (bgMusic.isPlaying()) bgMusic.pause();
+            }
+        });
+
         // --- Joystick ---
         joystickView = new JoystickView(this, (x, y) -> {
             if (!gameView.isPaused()) {
@@ -92,8 +104,6 @@ public class Level1Activity extends AppCompatActivity {
             if (!gameView.isPaused()) {
                 gameView.setPaused(true);
                 pauseOverlay.setVisibility(View.VISIBLE);
-                // (tùy chọn) fade-out nhẹ khi pause
-                // fadeOut(bgMusic, 250);
                 if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
             }
         });
@@ -102,8 +112,8 @@ public class Level1Activity extends AppCompatActivity {
         btnResume.setOnClickListener(v -> {
             pauseOverlay.setVisibility(View.GONE);
             gameView.setPaused(false);
-            // tiếp tục nhạc (fade-in cho mượt)
-            if (bgMusic != null && !bgMusic.isPlaying()) {
+            // chỉ phát lại nếu người chơi chưa tắt Music
+            if (bgMusic != null && gameView.isMusicEnabled() && !bgMusic.isPlaying()) {
                 bgMusic.start();
                 fadeIn(bgMusic, 400);
             }
@@ -135,8 +145,7 @@ public class Level1Activity extends AppCompatActivity {
             }
         });
 
-        // ===== Init music but DON'T start here (tránh rè lúc mới vào) =====
-        // Đặt file bg_level1.ogg/mp3 trong res/raw
+        // ===== Init music but DON'T start here =====
         bgMusic = MediaPlayer.create(this, R.raw.bg_game_level1);
         bgMusic.setLooping(true);
         bgMusic.setVolume(0f, 0f); // sẽ fade-in trong onResume()
@@ -145,11 +154,11 @@ public class Level1Activity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Nếu đang ở state pause overlay do onPause trước đó, giữ nguyên pause
+        // Nếu không paus e và người chơi bật Music -> phát
         if (!gameView.isPaused()) {
-            if (bgMusic != null && !bgMusic.isPlaying()) {
+            if (bgMusic != null && gameView.isMusicEnabled() && !bgMusic.isPlaying()) {
                 bgMusic.start();
-                fadeIn(bgMusic, 600); // 300–800ms tuỳ chỉnh
+                fadeIn(bgMusic, 600);
             }
         }
     }
@@ -161,7 +170,6 @@ public class Level1Activity extends AppCompatActivity {
             gameView.setPaused(true);
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
         }
-        // Dừng nhạc TRƯỚC super.onPause()
         if (bgMusic != null && bgMusic.isPlaying()) {
             bgMusic.pause();
         }
@@ -170,7 +178,6 @@ public class Level1Activity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // Giải phóng MediaPlayer
         if (bgMusic != null) {
             bgMusic.release();
             bgMusic = null;
@@ -204,7 +211,6 @@ public class Level1Activity extends AppCompatActivity {
         }
     }
 
-    // (tuỳ chọn) Fade-out nếu bạn muốn mượt khi pause/quit
     @SuppressWarnings("unused")
     private void fadeOut(MediaPlayer mp, int durationMs) {
         if (mp == null) return;
@@ -221,7 +227,7 @@ public class Level1Activity extends AppCompatActivity {
         }
         h.postDelayed(() -> {
             if (mp != null && mp.isPlaying()) mp.pause();
-            if (mp != null) mp.setVolume(1f, 1f); // reset cho lần phát sau
+            if (mp != null) mp.setVolume(1f, 1f);
         }, (long) (steps + 1) * stepDelay);
     }
 }

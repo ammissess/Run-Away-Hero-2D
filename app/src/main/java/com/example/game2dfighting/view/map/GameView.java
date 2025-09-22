@@ -17,7 +17,6 @@ import android.view.SurfaceView;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 
-
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
@@ -34,7 +33,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Thread gameThread;
     private volatile boolean isRunning = false;
 
-    // Map (ISLAND) & Sky & Camera (camera đang ở HỆ SKY)
+    // Map & camera ...
     private int mapWidth, mapHeight;
     private int cameraX = 0, cameraY = 0;
 
@@ -42,13 +41,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Player player;
     private EnemyManager enemyMgr;
 
-    // Input (từ joystick/phím)
+    // Input
     private boolean movingUp, movingDown, movingLeft, movingRight;
 
-    // Điểm xanh (tăng mana)
+    // Points
     private final ArrayList<Point> points = new ArrayList<>();
 
-    // Vẽ & RNG
+    // Paint & RNG
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Random random = new Random();
 
@@ -62,10 +61,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     // ===== Parallax background =====
     private Bitmap bmpSky, bmpIsland, bmpCloud;
-    private int skyW, skyH;            // kích thước sky đã scale
-    private int islandX, islandY;      // toạ độ đảo bên trong SKY (offset từ SKY → MAP)
+    private int skyW, skyH;
+    private int islandX, islandY;
 
-    // Mây
+    // Clouds ...
     private final ArrayList<Cloud> clouds = new ArrayList<>();
     private static class Cloud {
         float x, y; float v; float scale; float alpha; float parallax; int w, h;
@@ -85,20 +84,29 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private final Paint timePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint timeBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    // game over
     private volatile boolean gameOver = false;
 
-    // ================== BẮN ĐẠN ==================
+    // ================== BULLETS ==================
     private final List<Bullet> bullets = new ArrayList<>();
     private long nextShootAtMs = 0L;
     private static final long SHOOT_COOLDOWN_MS = 250L;
 
-    // Nút bắn & nút pause (UI screen space)
+    // UI buttons: fire & pause
     private Rect fireBtnRect;
     private float fireBtnRadiusPx;
-
     private Rect pauseBtnRect;
     private float pauseBtnRadiusPx;
+
+    // ====== NEW: Audio toggles (UI) ======
+    private Rect musicBtnRect, soundBtnRect;
+    private Bitmap bmMusicOn, bmMusicOff, bmSoundOn, bmSoundOff;
+    private boolean musicEnabled = true;
+    private boolean soundEnabled = true;
+
+    // Giao tiếp với Activity để điều khiển MediaPlayer nhạc nền
+    public interface AudioControl { void onMusicToggle(boolean enabled); }
+    private AudioControl audioControl;
+    public void setAudioControl(AudioControl c) { this.audioControl = c; }
 
     // ===== Audio (SFX) =====
     private SoundPool soundPool;
@@ -107,16 +115,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private float sfxVolume = 1.0f; // 0..1
     private int sfxPlayerHurtId = 0;
     private int sfxWallId = 0;
-    // Footstep SFX
     private int sfxRunStepId = 0;
     private long nextRunStepAtMs = 0L;
-    private int  runStepIntervalMs = 220; // nhịp bước (ms), chỉnh nhanh/chậm tuỳ ý
-    private int  lastPX = Integer.MIN_VALUE, lastPY = Integer.MIN_VALUE; // theo dõi di chuyển thật
+    private int  runStepIntervalMs = 220;
+    private int  lastPX = Integer.MIN_VALUE, lastPY = Integer.MIN_VALUE;
 
-    // Latch cạnh để chỉ phát âm khi vừa chạm (rising edge)
     private boolean atLeftEdge = false, atRightEdge = false, atTopEdge = false, atBottomEdge = false;
-
-
 
     public GameView(Context context) {
         super(context);
@@ -141,8 +145,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         resetTimer();
     }
 
-    private void initGame() {
-        // hiện đang khởi tạo trong surfaceCreated() sau khi biết kích thước map/sky
+    private void initGame() { /* ... */ }
+
+    private float dp(float v) {
+        return v * getResources().getDisplayMetrics().density;
+    }
+
+    private void initAudioToggleBitmaps() {
+        if (bmMusicOn != null) return;
+        Bitmap mOn  = BitmapFactory.decodeResource(getResources(), R.drawable.ic_music_on);
+        Bitmap mOff = BitmapFactory.decodeResource(getResources(), R.drawable.ic_music_off);
+        Bitmap sOn  = BitmapFactory.decodeResource(getResources(), R.drawable.ic_sound_on);
+        Bitmap sOff = BitmapFactory.decodeResource(getResources(), R.drawable.ic_sound_off);
+
+        int size = Math.round(dp(56)); // 56dp
+        bmMusicOn  = Bitmap.createScaledBitmap(mOn,  size, size, true);
+        bmMusicOff = Bitmap.createScaledBitmap(mOff, size, size, true);
+        bmSoundOn  = Bitmap.createScaledBitmap(sOn,  size, size, true);
+        bmSoundOff = Bitmap.createScaledBitmap(sOff, size, size, true);
     }
 
     // --- TIMER UTILS ---
@@ -151,21 +171,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         pausedAccumulatedMs = 0L;
         timerPaused = false;
     }
-
-    public void pauseTimer() {
-        if (!timerPaused) {
-            timerPaused = true;
-            pauseStartMs = System.currentTimeMillis();
-        }
-    }
-
-    public void resumeTimer() {
-        if (timerPaused) {
-            pausedAccumulatedMs += System.currentTimeMillis() - pauseStartMs;
-            timerPaused = false;
-        }
-    }
-
+    public void pauseTimer() { if (!timerPaused) { timerPaused = true; pauseStartMs = System.currentTimeMillis(); } }
+    public void resumeTimer() { if (timerPaused) { pausedAccumulatedMs += System.currentTimeMillis() - pauseStartMs; timerPaused = false; } }
     public int getElapsedSeconds() {
         long now = System.currentTimeMillis();
         long elapsedMs = timerPaused
@@ -178,60 +185,47 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     // ===== Pause API =====
     public void setPaused(boolean paused) {
         this.paused = paused;
-
         if (paused) {
-            // tắt input
             movingUp = movingDown = movingLeft = movingRight = false;
             player.up = player.down = player.left = player.right = false;
-
-            // ----- PAUSE TIMER -----
-            if (!timerPaused) {
-                timerPaused = true;
-                pauseStartMs = System.currentTimeMillis();
-            }
+            if (!timerPaused) { timerPaused = true; pauseStartMs = System.currentTimeMillis(); }
         } else {
-            // ----- RESUME TIMER -----
-            if (timerPaused) {
-                pausedAccumulatedMs += System.currentTimeMillis() - pauseStartMs;
-                timerPaused = false;
-            }
+            if (timerPaused) { pausedAccumulatedMs += System.currentTimeMillis() - pauseStartMs; timerPaused = false; }
         }
     }
-
     public boolean isPaused() { return paused; }
 
-    // ===== Surface =====
+    // ====== NEW: expose music/sound state to Activity ======
+    public boolean isMusicEnabled() { return musicEnabled; }
+    public boolean isSoundEnabled() { return soundEnabled; }
+
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         this.holder = holder;
 
-        initSound();  // load âm thanh bắn
+        initSound();  // load SFX
+        initAudioToggleBitmaps();
 
-
-        // === 2) ISLAND (map) – load TRƯỚC ===
+        // ISLAND
         Bitmap srcIsland = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_island);
-        bmpIsland = srcIsland; // có thể scale nếu muốn
+        bmpIsland = srcIsland;
         mapWidth  = bmpIsland.getWidth();
         mapHeight = bmpIsland.getHeight();
 
-        // Tạo player sau khi đã biết kích thước map — đặt GIỮA ĐẢO
+        // Player
         int playerW = 400, playerH = 400;
         int startX = mapWidth / 2 - playerW / 2;
         int startY = mapHeight / 2 - playerH / 2;
         player = new Player(getContext(), startX, startY, playerW, playerH);
         player.setMaxMana(0);
 
-        // EnemyManager dùng kích thước map
+        // Enemies
         enemyMgr = new EnemyManager(getContext(), mapWidth, mapHeight);
-
         enemyMgr.setCombatListener(new EnemyManager.CombatListener() {
-            @Override
-            public void onPlayerHit() {
-                playPlayerHurtSfx();
-            }
+            @Override public void onPlayerHit() { playPlayerHurtSfx(); }
         });
 
-        // === 1) SKY – load SAU khi biết mapWidth/Height ===
+        // SKY
         Bitmap srcSky = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_sky);
         int viewW = getWidth(), viewH = getHeight();
         int skyMargin = Math.max(viewW, viewH);
@@ -239,37 +233,32 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         skyH = Math.max(mapHeight + skyMargin*2, (int)(viewH * 1.5f));
         bmpSky = Bitmap.createScaledBitmap(srcSky, skyW, skyH, false);
 
-        // Tọa độ đặt đảo GIỮA sky
         islandX = (skyW - mapWidth) / 2;
         islandY = (skyH - mapHeight) / 2;
 
-        // === 3) CLOUDS ===
+        // CLOUDS ...
         bmpCloud = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_clouds);
         clouds.clear();
         Random r = new Random();
-
         int totalClouds = 150;
         int rows = 8;
         int baseW = bmpCloud.getWidth();
         int baseH = bmpCloud.getHeight();
-
         for (int i = 0; i < totalClouds; i++) {
             float row = r.nextInt(rows);
             float bandTop = skyH * 0.14f;
             float bandStep = skyH * 0.09f;
             float y = bandTop + row * bandStep + r.nextFloat() * (bandStep * 0.6f);
             float x = r.nextInt(skyW);
-
-            float depth = r.nextFloat(); // 0..1
-            float parallax = 0.10f + depth * 0.28f;     // 0.10..0.38
-            float scale    = 0.50f + depth * 1.10f;     // 0.50..1.60
-            float alpha    = 0.30f + depth * 0.70f;     // 0.30..1.00
+            float depth = r.nextFloat();
+            float parallax = 0.10f + depth * 0.28f;
+            float scale    = 0.50f + depth * 1.10f;
+            float alpha    = 0.30f + depth * 0.70f;
             float v        = 1.2f + depth * 4.2f + r.nextFloat() * 0.8f;
-
             clouds.add(new Cloud(x, y, v, scale, alpha, parallax, baseW, baseH));
         }
 
-        // Points theo toạ độ MAP
+        // Points
         if (points.isEmpty()) {
             int count = 200;
             for (int i = 0; i < count; i++) {
@@ -279,12 +268,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
 
-        // === CAMERA ở HỆ SKY ===
+        // CAMERA
         cameraX = (int)((player.centerX() + islandX) - getWidth()/2f);
         cameraY = (int)((player.centerY() + islandY) - getHeight()/2f);
         clampCamera();
 
-        // === Setup nút bắn + pause (UI screen space) ===
+        // Buttons
         setupButtons(getWidth(), getHeight());
 
         if (!isRunning) {
@@ -310,7 +299,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         try { if (gameThread != null) gameThread.join(); } catch (InterruptedException e) { Log.e(TAG, "stop", e); }
     }
 
-    // ===== Loop =====
     @Override
     public void run() {
         long lastUpdateMs = System.currentTimeMillis();
@@ -322,11 +310,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             long dtMs = now - lastUpdateMs;
             lastUpdateMs = now;
             if (dtMs < 0)   dtMs = 0;
-            if (dtMs > 100) dtMs = 100; // clamp
+            if (dtMs > 100) dtMs = 100;
 
             if (!paused && !gameOver) {
-
-                // ==== UPDATE CLOUDS ====
+                // UPDATE CLOUDS ...
                 for (Cloud c : clouds) {
                     c.x += c.v;
                     if (c.x > skyW + c.w) {
@@ -343,26 +330,23 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 player.left = movingLeft;
                 player.right = movingRight;
 
-                // update player (dtMs)
                 player.update(dtMs);
                 clampPlayerToMap();
 
-                /* ===== [SFX RUN STEP] Phát tiếng bước chân khi NHÂN VẬT đang DI CHUYỂN ===== */
-                boolean movedPixel = (player.x != lastPX) || (player.y != lastPY); // thật sự dịch chuyển?
+                // RUN STEP SFX
+                boolean movedPixel = (player.x != lastPX) || (player.y != lastPY);
                 long nowMs = System.currentTimeMillis();
                 if (movedPixel) {
                     if (nowMs >= nextRunStepAtMs) {
                         playRunStepSfx();
-                        nextRunStepAtMs = nowMs + runStepIntervalMs; // hẹn nhịp lần sau
+                        nextRunStepAtMs = nowMs + runStepIntervalMs;
                     }
                 } else {
-                    // đứng yên thì reset để lần sau nhấn đi sẽ phát ngay
                     nextRunStepAtMs = 0L;
                 }
                 lastPX = player.x; lastPY = player.y;
-                /* ===== [SFX RUN STEP] END ===== */
 
-                // camera follow (HỆ SKY)
+                // camera follow
                 cameraX = (int)((player.centerX() + islandX) - getWidth()/2f);
                 cameraY = (int)((player.centerY() + islandY) - getHeight()/2f);
                 clampCamera();
@@ -371,31 +355,23 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player, dtMs);
 
-                // ====== UPDATE BULLETS & COLLISION ======
+                // bullets
                 float dtSec = dtMs / 1000f;
                 for (int i = bullets.size() - 1; i >= 0; i--) {
                     Bullet b = bullets.get(i);
                     b.update(dtSec);
-                    if (!b.alive) {
-                        bullets.remove(i);
-                        continue;
-                    }
+                    if (!b.alive) { bullets.remove(i); continue; }
 
                     boolean hit = false;
                     for (Enemy en : enemyMgr.list()) {
-                        try {
-                            if (en.getState() == Enemy.State.DIE) continue;
-                        } catch (Throwable ignore) {}
+                        try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
                         if (b.hit(en)) {
                             hit = true;
                             enemyMgr.applyBulletHit(en, b.damage);
                             break;
                         }
                     }
-                    if (hit) {
-                        b.alive = false;
-                        bullets.remove(i);
-                    }
+                    if (hit) { b.alive = false; bullets.remove(i); }
                 }
 
                 if (player.getHp() <= 0) {
@@ -417,7 +393,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
             }
 
-            // ~60fps
             long frameTime = System.currentTimeMillis() - now;
             long sleep = 16 - frameTime;
             if (sleep > 0) sleep(sleep);
@@ -434,7 +409,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     .build();
             soundPool = new SoundPool.Builder()
                     .setAudioAttributes(aa)
-                    .setMaxStreams(4) // bắn liên tục vẫn ổn
+                    .setMaxStreams(4)
                     .build();
             sfxFireId = soundPool.load(getContext(), R.raw.fireball_shoot, 1);
             sfxWallId = soundPool.load(getContext(), R.raw.wall_bump, 1);
@@ -449,7 +424,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             sfxLoaded = false;
         }
     }
-
 
     private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignore) {} }
 
@@ -484,7 +458,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
-    // ===== TOUCH: Nút Pause + Nút bắn =====
+    // ===== TOUCH: Pause + Fire + NEW Music/Sound =====
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         final int action = event.getActionMasked();
@@ -495,54 +469,58 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         switch (action) {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_DOWN: {
-                // 1) Pause (trên-phải)
-                if (isInPauseButton(tx, ty)) {
-                    setPaused(!isPaused());
+                // Music/Sound buttons (ưu tiên bắt trước)
+                if (musicBtnRect != null && musicBtnRect.contains((int)tx, (int)ty)) {
+                    musicEnabled = !musicEnabled;
+                    if (audioControl != null) audioControl.onMusicToggle(musicEnabled);
+                    invalidate();
                     return true;
                 }
-                // 2) Fire (dưới-phải)
+                if (soundBtnRect != null && soundBtnRect.contains((int)tx, (int)ty)) {
+                    soundEnabled = !soundEnabled;
+                    invalidate();
+                    return true;
+                }
+
+                // Pause (trên-phải)
+                if (isInPauseButton(tx, ty)) {
+                    setPaused(!isPaused());
+                    // Khi resume từ pause: chỉ phát lại nhạc nếu musicEnabled → Activity đã xử lý
+                    return true;
+                }
+                // Fire (dưới-phải)
                 if (isInFireButton(tx, ty)) {
                     tryShootAtNearestEnemy();
                     return true;
                 }
-                // 3) Joystick / input khác của bạn để dưới đây nếu có
                 break;
             }
-            // case MOVE/UP: phần joystick hiện có của bạn
         }
         return true;
     }
 
-    // ===== Update helpers =====
     private void clampPlayerToMap() {
         boolean hitNowLeft   = (player.x <= 0);
         boolean hitNowTop    = (player.y <= 0);
         boolean hitNowRight  = (player.x + player.w >= mapWidth);
         boolean hitNowBottom = (player.y + player.h >= mapHeight);
 
-        // Kẹp vào biên
         if (player.x < 0) player.x = 0;
         if (player.y < 0) player.y = 0;
         if (player.x + player.w > mapWidth)  player.x = mapWidth - player.w;
         if (player.y + player.h > mapHeight) player.y = mapHeight - player.h;
 
-        // Chỉ phát âm khi "vừa chạm" mép (từ false -> true)
         if (hitNowLeft   && !atLeftEdge)   playWallSfx();
         if (hitNowTop    && !atTopEdge)    playWallSfx();
         if (hitNowRight  && !atRightEdge)  playWallSfx();
         if (hitNowBottom && !atBottomEdge) playWallSfx();
 
-        // Cập nhật latch
         atLeftEdge   = hitNowLeft;
         atTopEdge    = hitNowTop;
         atRightEdge  = hitNowRight;
         atBottomEdge = hitNowBottom;
-
-        // Khi rời khỏi mép (di chuyển vào trong), latch sẽ tự về false
     }
 
-
-    // KẸP CAMERA THEO BIÊN BẦU TRỜI (SKY)
     private void clampCamera() {
         if (cameraX < 0) cameraX = 0;
         if (cameraY < 0) cameraY = 0;
@@ -593,16 +571,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         float islandDrawY = islandY - cameraY;
         canvas.drawBitmap(bmpIsland, islandDrawX, islandDrawY, null);
 
-        // 4) ENTITIES (MAP hệ → trừ (camera - island) khi vẽ)
+        // 4) ENTITIES
         player.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
         enemyMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
 
-        // 5) BULLETS (MAP hệ)
+        // 5) BULLETS
         for (Bullet b : bullets) {
             b.draw(canvas, cameraX - islandX, cameraY - islandY);
         }
 
-        // 6) POINTS (MAP hệ)
+        // 6) POINTS
         drawPointsOnIsland(canvas);
 
         // 7) HUD + Buttons
@@ -610,6 +588,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         drawPauseButton(canvas);
         drawFireButton(canvas);
 
+        // Overlay pause
         if (paused) {
             Paint dim = new Paint();
             dim.setColor(Color.argb(120, 0, 0, 0));
@@ -622,8 +601,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             float centerX = getWidth() / 2f;
             float centerY = getHeight() / 2f;
             canvas.drawText("PAUSE", centerX, centerY, t);
-            //canvas.drawText("QUIT", centerX, centerY + 100, t);
         }
+
+        // === NEW: luôn vẽ 2 nút Audio SAU CÙNG để không bị phủ che ===
+        drawAudioToggles(canvas);
     }
 
     private void drawPointsOnIsland(Canvas canvas) {
@@ -685,7 +666,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private void setupButtons(int w, int h) {
         int margin = (int) (16 * getResources().getDisplayMetrics().density);
 
-        // Fire bottom-right (đối diện joystick)
+        // Fire bottom-right
         int fireSize = (int) (80 * getResources().getDisplayMetrics().density);
         int fireLeft = w - margin - fireSize;
         int fireTop  = h - margin - fireSize;
@@ -698,6 +679,30 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         int pauseTop  = margin;
         pauseBtnRect = new Rect(pauseLeft, pauseTop, pauseLeft + pauseSize, pauseTop + pauseSize);
         pauseBtnRadiusPx = pauseSize / 2f;
+
+        // ===== NEW: Music/Sound bottom-center (HORIZONTAL) =====
+        int audioSize = (int) dp(56);
+        int spacing   = (int) dp(12);
+
+        int totalW = audioSize * 2 + spacing;   // tổng bề rộng 2 nút + khoảng cách
+        int leftX  = (w - totalW) / 2;          // canh giữa theo ngang
+        int topY   = h - margin - audioSize;    // cùng một hàng sát đáy, dùng margin đã có ở trên
+
+// Music bên trái
+        musicBtnRect = new Rect(
+                leftX,
+                topY,
+                leftX + audioSize,
+                topY + audioSize
+        );
+
+// Sound bên phải
+        soundBtnRect = new Rect(
+                leftX + audioSize + spacing,
+                topY,
+                leftX + audioSize + spacing + audioSize,
+                topY + audioSize
+        );
     }
 
     // ===== Fire button (UI) =====
@@ -705,14 +710,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         if (fireBtnRect == null) return;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        // nền mờ
         p.setStyle(Paint.Style.FILL);
         p.setColor(Color.argb(160, 255, 255, 255));
         float cx = fireBtnRect.exactCenterX();
         float cy = fireBtnRect.exactCenterY();
         c.drawCircle(cx, cy, fireBtnRadiusPx, p);
 
-        // viền + icon đường thẳng (viên đạn)
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(6f);
         p.setColor(Color.BLACK);
@@ -726,14 +729,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         if (pauseBtnRect == null) return;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-        // nền tối
         p.setStyle(Paint.Style.FILL);
         p.setColor(Color.argb(180, 0, 0, 0));
         float cx = pauseBtnRect.exactCenterX();
         float cy = pauseBtnRect.exactCenterY();
         c.drawCircle(cx, cy, pauseBtnRadiusPx, p);
 
-        // icon ||
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(6f);
         p.setColor(Color.WHITE);
@@ -748,6 +749,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
     private boolean isInPauseButton(float x, float y) {
         return pauseBtnRect != null && pauseBtnRect.contains((int) x, (int) y);
+    }
+
+    // ===== NEW: vẽ 2 nút Audio =====
+    private void drawAudioToggles(Canvas c) {
+        if (bmMusicOn == null) initAudioToggleBitmaps();
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        // Music
+        Bitmap mbmp = musicEnabled ? bmMusicOn : bmMusicOff;
+        if (musicBtnRect != null && mbmp != null) {
+            c.drawBitmap(mbmp, musicBtnRect.left, musicBtnRect.top, p);
+        }
+
+        // Sound
+        Bitmap sbmp = soundEnabled ? bmSoundOn : bmSoundOff;
+        if (soundBtnRect != null && sbmp != null) {
+            c.drawBitmap(sbmp, soundBtnRect.left, soundBtnRect.top, p);
+        }
     }
 
     private void tryShootAtNearestEnemy() {
@@ -774,39 +793,43 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     target.x + target.w / 2f,
                     target.y + target.h / 2f,
                     mapWidth, mapHeight,
-                    getContext() // context cho sprite cầu lửa
+                    getContext()
             );
             bullets.add(b);
             nextShootAtMs = now + SHOOT_COOLDOWN_MS;
             playFireSfx();
-
         }
     }
+
+    // ===== SFX (đã tôn trọng soundEnabled) =====
     private void playFireSfx() {
-        if (paused) return;           // đang pause thì không phát
+        if (paused) return;
+        if (!soundEnabled) return;
         if (soundPool == null) return;
         if (!sfxLoaded) return;
-
-        // leftVol, rightVol, priority, loop(0=once), rate(0.5..2.0)
         soundPool.play(sfxFireId, sfxVolume, sfxVolume, 1, 0, 1.0f);
     }
 
     private void playWallSfx() {
         if (paused) return;
+        if (!soundEnabled) return;
         if (soundPool == null || !sfxLoaded) return;
-        float vol = 0.9f; // nhẹ hơn tiếng bắn 1 chút
+        float vol = 0.9f;
         soundPool.play(sfxWallId, vol, vol, 1, 0, 1.0f);
     }
 
     private void playPlayerHurtSfx() {
-        if (paused || soundPool == null || !sfxLoaded) return;
+        if (paused) return;
+        if (!soundEnabled) return;
+        if (soundPool == null || !sfxLoaded) return;
         soundPool.play(sfxPlayerHurtId, sfxVolume, sfxVolume, 1, 0, 1.0f);
     }
 
     private void playRunStepSfx() {
-        if (paused || soundPool == null || !sfxLoaded) return;
-        float rate = 0.92f + (float)Math.random() * 0.16f; // biến tấu pitch cho tự nhiên
+        if (paused) return;
+        if (!soundEnabled) return;
+        if (soundPool == null || !sfxLoaded) return;
+        float rate = 0.92f + (float)Math.random() * 0.16f;
         soundPool.play(sfxRunStepId, sfxVolume, sfxVolume, 1, 0, rate);
     }
-
 }

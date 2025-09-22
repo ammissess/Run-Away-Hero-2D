@@ -22,8 +22,8 @@ public class Player extends GameObject {
     private int speed = 6;
 
     // ==== HP ====
-    private int maxHp = 10;
-    private int hp    = 10;
+    private int maxHp = 100;
+    private int hp    = 100;
 
     // ==== Mana & Energy (thêm để khớp GameView) ====
     private int maxMana   = 50;
