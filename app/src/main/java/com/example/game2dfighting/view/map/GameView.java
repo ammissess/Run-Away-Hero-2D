@@ -122,6 +122,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private boolean atLeftEdge = false, atRightEdge = false, atTopEdge = false, atBottomEdge = false;
 
+    // ===== Debug bounds (outline) =====
+    private boolean showDebugBounds = true; // bật/tắt vẽ viền
+    private final Paint debugPaintPlayer = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint debugPaintEnemy  = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     public GameView(Context context) {
         super(context);
         holder = getHolder();
@@ -129,6 +134,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         setFocusable(true);
         setFocusableInTouchMode(true);
         requestFocus();
+
+        // Debug paints
+        debugPaintPlayer.setStyle(Paint.Style.STROKE);
+        debugPaintPlayer.setColor(Color.MAGENTA); // nhân vật: hồng
+        debugPaintPlayer.setStrokeWidth(dp(2));
+
+        debugPaintEnemy.setStyle(Paint.Style.STROKE);
+        debugPaintEnemy.setColor(Color.GREEN);    // quái: xanh lá
+        debugPaintEnemy.setStrokeWidth(dp(2));
+
 
         // TIMER HUD setup...
         timerStartMs = System.currentTimeMillis();
@@ -143,6 +158,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         timeBgPaint.setColor(Color.argb(120, 0, 0, 0));
 
         resetTimer();
+    }
+
+    // ===== Viền map (pixel tính theo bitmap island) =====
+    private static final int MAP_BORDER_PX = 300;
+
+    // Vùng chơi hợp lệ bên trong island (0..mapWidth/Height)
+    private Rect getPlayableRect() {
+        return new Rect(
+                MAP_BORDER_PX,
+                MAP_BORDER_PX,
+                Math.max(MAP_BORDER_PX, mapWidth  - MAP_BORDER_PX),
+                Math.max(MAP_BORDER_PX, mapHeight - MAP_BORDER_PX)
+        );
     }
 
     private void initGame() { /* ... */ }
@@ -260,10 +288,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // Points
         if (points.isEmpty()) {
+            Rect pr = getPlayableRect();
             int count = 200;
             for (int i = 0; i < count; i++) {
-                int x = r.nextInt(Math.max(1, mapWidth - 40)) + 20;
-                int y = r.nextInt(Math.max(1, mapHeight - 40)) + 20;
+                int x = pr.left + random.nextInt(Math.max(1, pr.width()  - 40)) + 20;
+                int y = pr.top  + random.nextInt(Math.max(1, pr.height() - 40)) + 20;
                 points.add(new Point(x, y));
             }
         }
@@ -354,6 +383,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 // enemies
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player, dtMs);
+
+                // NEW: đảm bảo enemy không lọt ra viền map
+                clampEnemiesToPlayable();
 
                 // bullets
                 float dtSec = dtMs / 1000f;
@@ -500,15 +532,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private void clampPlayerToMap() {
-        boolean hitNowLeft   = (player.x <= 0);
-        boolean hitNowTop    = (player.y <= 0);
-        boolean hitNowRight  = (player.x + player.w >= mapWidth);
-        boolean hitNowBottom = (player.y + player.h >= mapHeight);
+        Rect pr = getPlayableRect();
 
-        if (player.x < 0) player.x = 0;
-        if (player.y < 0) player.y = 0;
-        if (player.x + player.w > mapWidth)  player.x = mapWidth - player.w;
-        if (player.y + player.h > mapHeight) player.y = mapHeight - player.h;
+        boolean hitNowLeft   = (player.x <= pr.left);
+        boolean hitNowTop    = (player.y <= pr.top);
+        boolean hitNowRight  = (player.x + player.w >= pr.right);
+        boolean hitNowBottom = (player.y + player.h >= pr.bottom);
+
+        if (player.x < pr.left) player.x = pr.left;
+        if (player.y < pr.top)  player.y = pr.top;
+        if (player.x + player.w > pr.right)  player.x = pr.right  - player.w;
+        if (player.y + player.h > pr.bottom) player.y = pr.bottom - player.h;
 
         if (hitNowLeft   && !atLeftEdge)   playWallSfx();
         if (hitNowTop    && !atTopEdge)    playWallSfx();
@@ -521,6 +555,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         atBottomEdge = hitNowBottom;
     }
 
+    // === NEW: clamp toàn bộ enemy vào playable rect (gọi mỗi frame) ===
+    private void clampEnemiesToPlayable() {
+        if (enemyMgr == null) return;
+        Rect pr = getPlayableRect();
+        for (Enemy en : enemyMgr.list()) {
+            try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+            if (en.x < pr.left) en.x = pr.left;
+            if (en.y < pr.top)  en.y = pr.top;
+            if (en.x + en.w > pr.right)  en.x = pr.right  - en.w;
+            if (en.y + en.h > pr.bottom) en.y = pr.bottom - en.h;
+        }
+    }
+
+
+
     private void clampCamera() {
         if (cameraX < 0) cameraX = 0;
         if (cameraY < 0) cameraY = 0;
@@ -532,6 +581,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private static class Point { int x,y; Point(int x,int y){this.x=x;this.y=y;} }
 
+
     private void updatePointsAndLevelUpIfNeeded() {
         Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
         for (int i = points.size() - 1; i >= 0; i--) {
@@ -540,12 +590,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             if (Rect.intersects(playerRect, pointRect)) {
                 points.remove(i);
                 player.addMana(1);
-                int x = random.nextInt(mapWidth - 40) + 20;
-                int y = random.nextInt(mapHeight - 40) + 20;
+
+                // NEW: respawn trong playable rect (thụt 100px)
+                Rect pr = getPlayableRect();
+                int x = pr.left + random.nextInt(Math.max(1, pr.width()  - 40)) + 20;
+                int y = pr.top  + random.nextInt(Math.max(1, pr.height() - 40)) + 20;
                 points.add(new Point(x, y));
             }
         }
     }
+
 
     // ===== Render =====
     private void render(Canvas canvas) {
@@ -579,6 +633,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         for (Bullet b : bullets) {
             b.draw(canvas, cameraX - islandX, cameraY - islandY);
         }
+
+        drawEntityBounds(canvas);
 
         // 6) POINTS
         drawPointsOnIsland(canvas);
@@ -832,4 +888,34 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         float rate = 0.92f + (float)Math.random() * 0.16f;
         soundPool.play(sfxRunStepId, sfxVolume, sfxVolume, 1, 0, rate);
     }
+
+    private void drawEntityBounds(Canvas c) {
+        if (!showDebugBounds || player == null || enemyMgr == null) return;
+
+        // offset màn hình (giống cách bạn vẽ entity: player.draw(canvas, cameraX - islandX, cameraY - islandY))
+        float offX = cameraX - islandX;
+        float offY = cameraY - islandY;
+
+        // ---- Player ----
+        float pl = player.x - offX;
+        float pt = player.y - offY;
+        float pr = pl + player.w;
+        float pb = pt + player.h;
+        c.drawRect(pl, pt, pr, pb, debugPaintPlayer);
+
+        // chấm tâm (tuỳ chọn)
+        // c.drawCircle(pl + player.w/2f, pt + player.h/2f, dp(2), debugPaintPlayer);
+
+        // ---- Enemies ----
+        for (Enemy en : enemyMgr.list()) {
+            try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+            float el = en.x - offX;
+            float et = en.y - offY;
+            float er = el + en.w;
+            float eb = et + en.h;
+            c.drawRect(el, et, er, eb, debugPaintEnemy);
+            // c.drawCircle(el + en.w/2f, et + en.h/2f, dp(2), debugPaintEnemy); // chấm tâm (tuỳ chọn)
+        }
+    }
+
 }

@@ -86,10 +86,6 @@ public class EnemyManager {
     // ====== API ======
     public List<Enemy> list() { return enemies; }
 
-//    public List<Enemy> getEnemies() {
-//        return enemies;
-//    }
-
     /** Spawn ngẫu nhiên từ 4 cạnh map. */
     public void maybeSpawn() {
         long now = System.currentTimeMillis();
@@ -264,9 +260,9 @@ public class EnemyManager {
             final float sprH = e.getSpriteH();
 
             // NOTE: Nếu anim đang scale hiển thị khác, bạn có thể thay bằng kích thước hiển thị thực tế
-            final float barW = sprW - 150f; // chỉnh theo nhu cầu
-            final float barH = 8f;
-            final float gapY = -150f;
+            final float barW = e.w; // chỉnh theo nhu cầu
+            final float barH = 10f;
+            final float gapY = 20f;
 
             // Toạ độ đã trừ camera
             final float screenX = e.x - cameraX;

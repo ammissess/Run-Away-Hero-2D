@@ -71,7 +71,6 @@ public class Player extends GameObject {
     }
 
     private void loadAnimations() {
-        // Đổi các resource dưới đây theo tên file bạn đang có
         int[] idleIds = new int[]{
                 R.drawable.p_idle_0, R.drawable.p_idle_1, R.drawable.p_idle_2,
                 R.drawable.p_idle_3, R.drawable.p_idle_4, R.drawable.p_idle_5
@@ -93,17 +92,31 @@ public class Player extends GameObject {
                 R.drawable.p_die_3,
         };
 
-        // Lấy kích thước sprite gốc
-        Bitmap sample = SpriteAnim.loadFrames(ctx, new int[]{ idleIds[0] })[0];
+        // Load & TRIM các frame để bỏ viền rỗng
+        Bitmap[] idleF = loadAndTrimFrames(ctx, idleIds);
+        Bitmap[] runF  = loadAndTrimFrames(ctx, runIds);
+        Bitmap[] atkF  = loadAndTrimFrames(ctx, atkIds);
+        Bitmap[] hurtF = loadAndTrimFrames(ctx, hurtIds);
+        Bitmap[] dieF  = loadAndTrimFrames(ctx, dieIds);
+
+        // Kích thước sprite gốc sau khi TRIM (để tham chiếu)
+        Bitmap sample = idleF[0];
         spriteW = (sample != null) ? sample.getWidth()  : w;
         spriteH = (sample != null) ? sample.getHeight() : h;
 
-        // Tạo anim (scale về w,h)
-        SpriteAnim idle = new SpriteAnim(SpriteAnim.loadFrames(ctx, idleIds), 120, true,  w, h);
-        SpriteAnim run  = new SpriteAnim(SpriteAnim.loadFrames(ctx, runIds),   80,  true,  w, h);
-        SpriteAnim atk  = new SpriteAnim(SpriteAnim.loadFrames(ctx, atkIds),   90,  false, w, h);
-        SpriteAnim hurt = new SpriteAnim(SpriteAnim.loadFrames(ctx, hurtIds),  90,  false, w, h);
-        SpriteAnim die  = new SpriteAnim(SpriteAnim.loadFrames(ctx, dieIds),  120,  false, w, h);
+        this.w = 100;
+        this.h = 100;
+
+        // Có thể đặt 1 biến chung:
+        final int DRAW_W = 100;
+        final int DRAW_H = 100;
+
+        // Tạo anim: SpriteAnim sẽ scale các frame đã TRIM về kích thước hiển thị w,h
+        SpriteAnim idle = new SpriteAnim(idleF, 120, true,  DRAW_W, DRAW_H);
+        SpriteAnim run  = new SpriteAnim(runF,   80,  true,  DRAW_W, DRAW_H);
+        SpriteAnim atk  = new SpriteAnim(atkF,   90,  false, DRAW_W, DRAW_H);
+        SpriteAnim hurt = new SpriteAnim(hurtF,  90,  false, DRAW_W, DRAW_H);
+        SpriteAnim die  = new SpriteAnim(dieF,  120,  false, DRAW_W, DRAW_H);
 
         anims.put(State.IDLE,   idle);
         anims.put(State.RUN,    run);
@@ -111,6 +124,7 @@ public class Player extends GameObject {
         anims.put(State.HURT,   hurt);
         anims.put(State.DIE,    die);
     }
+
 
     /**
      * Update mỗi frame: LUÔN cập nhật vị trí nếu canMove() == true,
@@ -274,4 +288,37 @@ public class Player extends GameObject {
     public int  getMaxEnergy()      { return maxEnergy; }
     public void setEnergy(int v)    { energy = Math.max(0, Math.min(maxEnergy, v)); }
     public void setMaxEnergy(int v) { maxEnergy = Math.max(0, v); energy = Math.min(energy, maxEnergy); }
+
+    // --- Utils: cắt khung trong suốt và load+trim một mảng frames ---
+    private static Bitmap trimTransparent(Bitmap src) {
+        if (src == null) return null;
+        final int w = src.getWidth(), h = src.getHeight();
+        int[] px = new int[w * h];
+        src.getPixels(px, 0, w, 0, 0, w, h);
+
+        int left = w, top = h, right = -1, bottom = -1;
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                int a = (px[row + x] >>> 24) & 0xFF;  // alpha
+                if (a != 0) {
+                    if (x < left)   left = x;
+                    if (x > right)  right = x;
+                    if (y < top)    top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) return src; // toàn bộ rỗng
+        return Bitmap.createBitmap(src, left, top, right - left + 1, bottom - top + 1);
+    }
+
+    private static Bitmap[] loadAndTrimFrames(Context ctx, int[] ids) {
+        Bitmap[] frames = SpriteAnim.loadFrames(ctx, ids);
+        for (int i = 0; i < frames.length; i++) {
+            frames[i] = trimTransparent(frames[i]);
+        }
+        return frames;
+    }
+
 }

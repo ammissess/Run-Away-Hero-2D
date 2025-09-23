@@ -54,7 +54,6 @@ public class Enemy extends GameObject {
         setState(State.IDLE);
     }
 
-    // Tải các animation và scale về kích thước hiện tại (w,h)
     private void loadAnimations() {
         int[] idleIds = new int[]{
                 R.drawable.e_idle_0, R.drawable.e_idle_1, R.drawable.e_idle_2,
@@ -74,22 +73,36 @@ public class Enemy extends GameObject {
                 R.drawable.e_die_3
         };
 
-        // Lấy kích thước sprite gốc (để tham chiếu nếu cần)
-        Bitmap sample = SpriteAnim.loadFrames(ctx, new int[]{ R.drawable.e_idle_0 })[0];
+        // Load & TRIM để bỏ padding rỗng
+        Bitmap[] idleF = loadAndTrimFrames(ctx, idleIds);
+        Bitmap[] runF  = loadAndTrimFrames(ctx, runIds);
+        Bitmap[] atkF  = loadAndTrimFrames(ctx, atkIds);
+        Bitmap[] dieF  = loadAndTrimFrames(ctx, dieIds);
+
+        // Kích thước sprite gốc sau khi TRIM
+        Bitmap sample = idleF[0];
         spriteW = (sample != null) ? sample.getWidth()  : w;
         spriteH = (sample != null) ? sample.getHeight() : h;
 
-        // Tạo animation (được scale về w,h hiện tại)
-        SpriteAnim idle = new SpriteAnim(SpriteAnim.loadFrames(ctx, idleIds), 140, true,  w, h);
-        SpriteAnim run  = new SpriteAnim(SpriteAnim.loadFrames(ctx, runIds),   90,  true,  w, h);
-        SpriteAnim atk  = new SpriteAnim(SpriteAnim.loadFrames(ctx, atkIds),  100, false, w, h);
-        SpriteAnim die  = new SpriteAnim(SpriteAnim.loadFrames(ctx, dieIds),  120, false, w, h);
+        this.w = 100;
+        this.h = 100;
+
+        // Có thể đặt 1 biến chung:
+        final int DRAW_W = 100;
+        final int DRAW_H = 100;
+
+        // Tạo anim đã TRIM, scale về w,h hiển thị
+        SpriteAnim idle = new SpriteAnim(idleF, 140, true,  DRAW_W, DRAW_H);
+        SpriteAnim run  = new SpriteAnim(runF,   90,  true,  DRAW_W, DRAW_H);
+        SpriteAnim atk  = new SpriteAnim(atkF,  100, false, DRAW_W, DRAW_H);
+        SpriteAnim die  = new SpriteAnim(dieF,  120, false, DRAW_W, DRAW_H);
 
         anims.put(State.IDLE,   idle);
         anims.put(State.RUN,    run);
         anims.put(State.ATTACK, atk);
         anims.put(State.DIE,    die);
     }
+
 
     /**
      * Đuổi theo mục tiêu – tôn trọng anim lock để không ghi đè ATTACK/DIE.
@@ -183,4 +196,36 @@ public class Enemy extends GameObject {
     // Getter kích thước sprite gốc (nếu bạn muốn vẽ HP bar bằng kích thước sprite thật)
     public int getSpriteW() { return spriteW; }
     public int getSpriteH() { return spriteH; }
+
+    private static Bitmap trimTransparent(Bitmap src) {
+        if (src == null) return null;
+        final int w = src.getWidth(), h = src.getHeight();
+        int[] px = new int[w * h];
+        src.getPixels(px, 0, w, 0, 0, w, h);
+
+        int left = w, top = h, right = -1, bottom = -1;
+        for (int y = 0; y < h; y++) {
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                int a = (px[row + x] >>> 24) & 0xFF;
+                if (a != 0) {
+                    if (x < left)   left = x;
+                    if (x > right)  right = x;
+                    if (y < top)    top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) return src;
+        return Bitmap.createBitmap(src, left, top, right - left + 1, bottom - top + 1);
+    }
+
+    private static Bitmap[] loadAndTrimFrames(Context ctx, int[] ids) {
+        Bitmap[] frames = SpriteAnim.loadFrames(ctx, ids);
+        for (int i = 0; i < frames.length; i++) {
+            frames[i] = trimTransparent(frames[i]);
+        }
+        return frames;
+    }
+
 }
