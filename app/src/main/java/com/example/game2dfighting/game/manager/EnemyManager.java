@@ -5,6 +5,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 
 import com.example.game2dfighting.game.entity.Enemy;
+import com.example.game2dfighting.game.entity.Enemy2;
+import com.example.game2dfighting.game.entity.Enemy3;
 import com.example.game2dfighting.game.entity.Player;
 
 import java.util.ArrayList;
@@ -16,266 +18,344 @@ import java.util.Random;
 public class EnemyManager {
     // ====== Core ======
     private final Context ctx;
-    private final List<Enemy> enemies = new ArrayList<>();
+
+    // 3 danh sách quái tách riêng
+    private final List<Enemy> enemies1 = new ArrayList<>();
+    private final List<Enemy> enemies2 = new ArrayList<>();
+    private final List<Enemy> enemies3 = new ArrayList<>();
+
     private final Random rnd = new Random();
     private final int mapW, mapH;
-    private long lastSpawn = 0L;
 
-    // Giới hạn & tốc độ spawn
-    public int  maxEnemies       = 5;
-    public long spawnIntervalMs  = 800L;
-    private static final float STOP_GAP_PX = 20f; // quái dừng cách mép player 20 px
+    // Mốc thời gian mở khóa loại quái
+    private final long gameStartAtMs  = System.currentTimeMillis();
+    private final long type2StartAtMs = gameStartAtMs + 10_000L; // Enemy2 sau 10s
+    private final long type3StartAtMs = gameStartAtMs + 20_000L; // Enemy3 sau 20s
 
-    // ====== Combat config ======
-    private static final int   ENEMY_DAMAGE           = 3;      // quái đánh người
-    private static final long  ENEMY_COOLDOWN_MS      = 1200L;  // hồi đòn quái
-    private static final int   PLAYER_DAMAGE          = 12;     // người đánh quái (auto khi áp sát)
-    private static final long  PLAYER_COOLDOWN_MS     = 400L;   // hồi đòn người
-    private static final float ATTACK_RANGE_PADDING   = 12f;    // cộng thêm ngoài bán kính tiếp xúc
+    // Spawn interval từng loại
+    public long spawnIntervalMs1 = 800L;
+    public long spawnIntervalMs2 = 800L;
+    public long spawnIntervalMs3 = 800L;
 
-    // HP quái (quản lý ở Manager để giữ nguyên Enemy.java)
-    private static final int ENEMY_MAX_HP = 30;
+    // last spawn từng loại
+    private long lastSpawn1 = 0L;
+    private long lastSpawn2 = 0L;
+    private long lastSpawn3 = 0L;
 
-    private final Paint hpPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Giới hạn tối đa độc lập (ban đầu 3, mỗi 10s +1)
+    private static final int BASE_MAX_1 = 3;
+    private static final int BASE_MAX_2 = 3;
+    private static final int BASE_MAX_3 = 3;
+
+    // Combat config chung
+    private static final float ATTACK_RANGE_PADDING = 12f;
+    private static final long ENEMY_COOLDOWN_MS  = 1200L; // cooldown quái
+    private static final long PLAYER_COOLDOWN_MS = 400L;  // cooldown người
+    private static final int  PLAYER_DAMAGE      = 12;
+
+    // Vẽ
+    private final Paint hpPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint hpBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint sharedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     // Trạng thái combat
     private final Map<Enemy, Long>    nextEnemyAttackAtMs = new HashMap<>();
     private final Map<Enemy, Integer> enemyHp             = new HashMap<>();
     private long nextPlayerAttackAtMs = 0L;
 
-    // Vẽ (truyền cho GameObject.draw)
-    private final Paint sharedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
     // Scale enemy khi spawn
     private static final float ENEMY_SCALE = 4f;
-
-    // Kích thước sprite/quái khi spawn
-    private final int enemyBaseW = 100;
-    private final int enemyBaseH = 100;
+    private final int enemyBaseW = 100, enemyBaseH = 100;
     private int enemyW = Math.round(enemyBaseW * ENEMY_SCALE);
     private int enemyH = Math.round(enemyBaseH * ENEMY_SCALE);
 
-    // ===== Combat listener =====
-    public interface CombatListener {
-        void onPlayerHit();  // quái đánh trúng người
-    }
+    // Listener (optional)
+    public interface CombatListener { void onPlayerHit(); }
     private CombatListener combatListener = null;
     public void setCombatListener(CombatListener l) { this.combatListener = l; }
 
-
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
-        this.ctx = ctx;
-        this.mapW = mapW;
-        this.mapH = mapH;
-
-        // --- HP bar paints ---
-        hpPaint.setColor(0xFFFF0000);     // Đỏ
-        hpPaint.setStyle(Paint.Style.FILL);
-
-        hpBgPaint.setColor(0xFF555555);   // Xám nền
-        hpBgPaint.setStyle(Paint.Style.FILL);
+        this.ctx = ctx; this.mapW = mapW; this.mapH = mapH;
+        hpPaint.setColor(0xFFFF0000); hpPaint.setStyle(Paint.Style.FILL);
+        hpBgPaint.setColor(0xFF555555); hpBgPaint.setStyle(Paint.Style.FILL);
     }
-
-    // Tuỳ chọn: để không vỡ compile nếu nơi khác vẫn gọi ctor cũ
-    public EnemyManager(int mapW, int mapH) {
-        this(null, mapW, mapH);
-    }
+    public EnemyManager(int mapW, int mapH) { this(null, mapW, mapH); }
 
     // ====== API ======
-    public List<Enemy> list() { return enemies; }
+    public List<Enemy> list() {
+        List<Enemy> all = new ArrayList<>(enemies1.size() + enemies2.size() + enemies3.size());
+        all.addAll(enemies1); all.addAll(enemies2); all.addAll(enemies3);
+        return all;
+    }
 
-    /** Spawn ngẫu nhiên từ 4 cạnh map. */
-    public void maybeSpawn() {
-        long now = System.currentTimeMillis();
-        if (enemies.size() >= maxEnemies) return;
-        if (now - lastSpawn < spawnIntervalMs) return;
-        lastSpawn = now;
+    // ==== Max theo thời gian ====
+    private int computeMax1(long now) {
+        long elapsed = Math.max(0L, now - gameStartAtMs);
+        return BASE_MAX_1 + (int)(elapsed / 10_000L);
+    }
+    private int computeMax2(long now) {
+        if (now < type2StartAtMs) return 0;
+        long elapsed = now - type2StartAtMs;
+        return BASE_MAX_2 + (int)(elapsed / 10_000L);
+    }
+    private int computeMax3(long now) {
+        if (now < type3StartAtMs) return 0;
+        long elapsed = now - type3StartAtMs;
+        return BASE_MAX_3 + (int)(elapsed / 10_000L);
+    }
 
-        if (ctx == null) {
-            throw new IllegalStateException(
-                    "EnemyManager requires Context to spawn animated Enemy. " +
-                            "Use new EnemyManager(getContext(), mapW, mapH)."
-            );
-        }
-
-        int x = 0, y = 0;
-        int edge = rnd.nextInt(4);
+    // ==== Spawn vị trí ngẫu nhiên ở mép map ====
+    private int[] randomSpawnPos() {
+        int x, y, edge = rnd.nextInt(4);
         switch (edge) {
-            case 0: // top
-                x = rnd.nextInt(Math.max(1, mapW - enemyW));
-                y = 0;
-                break;
-            case 1: // bottom
-                x = rnd.nextInt(Math.max(1, mapW - enemyW));
-                y = mapH - enemyH;
-                break;
-            case 2: // left
-                x = 0;
-                y = rnd.nextInt(Math.max(1, mapH - enemyH));
-                break;
-            default: // right
-                x = mapW - enemyW;
-                y = rnd.nextInt(Math.max(1, mapH - enemyH));
-                break;
+            case 0: x = rnd.nextInt(Math.max(1, mapW - enemyW)); y = 0; break;
+            case 1: x = rnd.nextInt(Math.max(1, mapW - enemyW)); y = mapH - enemyH; break;
+            case 2: x = 0; y = rnd.nextInt(Math.max(1, mapH - enemyH)); break;
+            default: x = mapW - enemyW; y = rnd.nextInt(Math.max(1, mapH - enemyH)); break;
         }
+        return new int[]{x, y};
+    }
 
-        Enemy e = new Enemy(ctx, x, y, enemyW, enemyH);
-        enemies.add(e);
-        enemyHp.put(e, ENEMY_MAX_HP);
+    private void spawnEnemy1() {
+        int[] pos = randomSpawnPos();
+        Enemy e = new Enemy(ctx, pos[0], pos[1], enemyW, enemyH);
+        enemies1.add(e);
+        enemyHp.put(e, Enemy.BASE_HP);
+        nextEnemyAttackAtMs.put(e, 0L);
+    }
+    private void spawnEnemy2() {
+        int[] pos = randomSpawnPos();
+        Enemy e = new Enemy2(ctx, pos[0], pos[1], enemyW, enemyH);
+        enemies2.add(e);
+        enemyHp.put(e, Enemy2.BASE_HP);
+        nextEnemyAttackAtMs.put(e, 0L);
+    }
+    private void spawnEnemy3() {
+        int[] pos = randomSpawnPos();
+        Enemy e = new Enemy3(ctx, pos[0], pos[1], enemyW, enemyH);
+        enemies3.add(e);
+        enemyHp.put(e, Enemy3.BASE_HP);
         nextEnemyAttackAtMs.put(e, 0L);
     }
 
-    /**
-     * Cập nhật đuổi theo + tấn công (bản có dtMs).
-     * - Quái áp sát → đánh người (cooldown riêng từng quái)
-     * - Người áp sát → tự đánh quái (cooldown chung)
-     */
+    // ==== Maybe spawn theo từng loại (giới hạn độc lập) ====
+    public void maybeSpawn() {
+        long now = System.currentTimeMillis();
+        if (ctx == null) throw new IllegalStateException("EnemyManager requires Context to spawn.");
+
+        int max1 = computeMax1(now);
+        if (enemies1.size() < max1 && now - lastSpawn1 >= spawnIntervalMs1) { spawnEnemy1(); lastSpawn1 = now; }
+
+        int max2 = computeMax2(now);
+        if (enemies2.size() < max2 && now - lastSpawn2 >= spawnIntervalMs2) { spawnEnemy2(); lastSpawn2 = now; }
+
+        int max3 = computeMax3(now);
+        if (enemies3.size() < max3 && now - lastSpawn3 >= spawnIntervalMs3) { spawnEnemy3(); lastSpawn3 = now; }
+    }
+
+    // ==== Update + Combat ====
     public void updateTowardsPlayer(Player p, long dtMs) {
         long now = System.currentTimeMillis();
+        updateAndCombatForList(enemies1, p, dtMs, now, 1);
+        updateAndCombatForList(enemies2, p, dtMs, now, 2);
+        updateAndCombatForList(enemies3, p, dtMs, now, 3);
 
-        for (int i = enemies.size() - 1; i >= 0; i--) {
-            Enemy e = enemies.get(i);
+        List<Enemy> all = list();
+        nextEnemyAttackAtMs.keySet().retainAll(all);
+        enemyHp.keySet().retainAll(all);
 
-            if (!enemyHp.containsKey(e))             enemyHp.put(e, ENEMY_MAX_HP);
+        cleanupDead(enemies1);
+        cleanupDead(enemies2);
+        cleanupDead(enemies3);
+    }
+
+    /**
+     * typeId: 1,2,3 tương ứng Enemy / Enemy2 / Enemy3
+     */
+    private void updateAndCombatForList(List<Enemy> list, Player p, long dtMs, long now, int typeId) {
+        for (int i = list.size() - 1; i >= 0; i--) {
+            Enemy e = list.get(i);
+
+            // Init HP & cooldown
+            if (!enemyHp.containsKey(e)) {
+                int hp = (typeId == 2) ? Enemy2.BASE_HP : (typeId == 3) ? Enemy3.BASE_HP : Enemy.BASE_HP;
+                enemyHp.put(e, hp);
+            }
             if (!nextEnemyAttackAtMs.containsKey(e)) nextEnemyAttackAtMs.put(e, 0L);
 
-            // Pursue (Enemy.pursue đã tự chặn nếu đang DIE)
-            try { e.pursue(p.x, p.y, dtMs); }
-            catch (Throwable ignore) {
-                // Fallback di chuyển đơn giản
-                float ecx = e.x + e.w / 2f, ecy = e.y + e.h / 2f;
-                float pcx = p.x + p.w / 2f, pcy = p.y + p.h / 2f;
-                float dx  = pcx - ecx,      dy  = pcy - ecy;
-                float len = (float) Math.sqrt(dx * dx + dy * dy);
-                if (len > 1e-4f) {
-                    float step = 3f * (dtMs / 16f);
-                    e.x += (int) (dx / len * step);
-                    e.y += (int) (dy / len * step);
-                }
+            // Pursue + chống đè lên Player
+            int oldX = e.x, oldY = e.y;        // 1) Lưu vị trí cũ
+            try { e.pursue(p.x, p.y, dtMs); } catch (Throwable ignore) {}
+
+            // 2) Nếu sau khi di chuyển bị chồng lên player -> trả về vị trí cũ
+            if (isOverlapCircle(p, e, 0f)) {
+                e.x = oldX;
+                e.y = oldY;
+                e.forceIdle();                 // tránh “đẩy” liên tục vào người chơi
             }
 
-            // --- Combat trigger ---
+            // Trigger tấn công: Enemy2 & Enemy3 có extra range 50 (giống yêu cầu trước)
             float enemyRadius  = Math.min(e.w, e.h) / 2f;
             float playerRadius = Math.min(p.w, p.h) / 2f;
-            float trigger      = enemyRadius + playerRadius + ATTACK_RANGE_PADDING;
+            float extraRange   = (typeId == 2 || typeId == 3) ? 50f : 0f;
+            float trigger      = enemyRadius + playerRadius + ATTACK_RANGE_PADDING + extraRange;
 
-            float ddx   = (p.x + p.w / 2f) - (e.x + e.w / 2f);
-            float ddy   = (p.y + p.h / 2f) - (e.y + e.h / 2f);
-            float dist2 = ddx * ddx + ddy * ddy;
+            float ddx = (p.x + p.w/2f) - (e.x + e.w/2f);
+            float ddy = (p.y + p.h/2f) - (e.y + e.h/2f);
+            float dist2 = ddx*ddx + ddy*ddy;
 
-            if (dist2 <= trigger * trigger) {
-
-                // NEW: bỏ qua toàn bộ combat với quái đã DIE
-                boolean enemyIsDying = false;
-                try {
-                    enemyIsDying = (e.getState().toString().equals("DIE"));
-                } catch (Throwable ignore) { /* nếu không có API state thì coi như chưa chết */ }
-
-                if (!enemyIsDying) {
-                    // Enemy -> Player
-                    long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
-                    if (now >= readyAt) {
-                        try { e.startAttack(); } catch (Throwable ignore) {}
-                        boolean playerDead = safeTakeDamage(p, ENEMY_DAMAGE);
-                        if (combatListener != null) combatListener.onPlayerHit();
-                        nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
-                        if (playerDead) { /* GameView xử lý */ }
-                    }
-
-                    // Player -> Enemy
-                    if (now >= nextPlayerAttackAtMs) {
-                        try { p.startAttack(); } catch (Throwable ignore) {}
-
-                        int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
-                        hp = Math.max(0, hp - PLAYER_DAMAGE);
-                        enemyHp.put(e, hp);
-
-                        // Cooldown đánh của Player (có thể thay bằng p.getAttackDurationMs())
-                        nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
-
-                        if (hp == 0) {
-                            try { e.onDie(); } catch (Throwable ignore) {}
-                            // KHÔNG remove ngay – sẽ quét dọn ở dưới sau khi anim DIE xong
-                        }
-                    }
+            if (dist2 <= trigger*trigger) {
+                // Tách riêng cách tấn công theo loại (hiện giống Enemy1)
+                switch (typeId) {
+                    case 1: handleCombatType1(e, p, now); break;
+                    case 2: handleCombatType2(e, p, now); break; // giống 1
+                    case 3: handleCombatType3(e, p, now); break; // giống 1
                 }
             }
         }
+    }
 
-        // Giữ map đồng bộ với danh sách hiện hành
-        nextEnemyAttackAtMs.keySet().retainAll(enemies);
-        enemyHp.keySet().retainAll(enemies);
+    // ==== CÁCH TẤN CÔNG THEO LOẠI (hiện tại giống hệt quái 1) ====
+    private void handleCombatType1(Enemy e, Player p, long now) {
+        if (isDying(e)) return;
 
-        // NEW: Quét dọn quái đã kết thúc animation DIE
-        for (int i = enemies.size() - 1; i >= 0; i--) {
-            Enemy e = enemies.get(i);
+        // Enemy -> Player
+        long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
+        if (now >= readyAt) {
+            try { e.startAttack(); } catch (Throwable ignore) {}
+            int dmg = Enemy.BASE_DAMAGE;
+            boolean playerDead = safeTakeDamage(p, dmg);
+            if (combatListener != null) combatListener.onPlayerHit();
+            nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
+        }
+
+        // Player -> Enemy
+        if (now >= nextPlayerAttackAtMs) {
+            try { p.startAttack(); } catch (Throwable ignore) {}
+            int hp = enemyHp.getOrDefault(e, 1);
+            hp = Math.max(0, hp - PLAYER_DAMAGE);
+            enemyHp.put(e, hp);
+            nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
+            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+        }
+    }
+
+    private void handleCombatType2(Enemy e, Player p, long now) {
+        // hiện giống type1, chỉ khác damage theo Enemy2
+        if (isDying(e)) return;
+
+        long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
+        if (now >= readyAt) {
+            try { e.startAttack(); } catch (Throwable ignore) {}
+            int dmg = Enemy2.BASE_DAMAGE;
+            boolean playerDead = safeTakeDamage(p, dmg);
+            if (combatListener != null) combatListener.onPlayerHit();
+            nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
+        }
+
+        if (now >= nextPlayerAttackAtMs) {
+            try { p.startAttack(); } catch (Throwable ignore) {}
+            int hp = enemyHp.getOrDefault(e, 1);
+            hp = Math.max(0, hp - PLAYER_DAMAGE);
+            enemyHp.put(e, hp);
+            nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
+            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+        }
+    }
+
+    private void handleCombatType3(Enemy e, Player p, long now) {
+        // hiện giống type1, chỉ khác damage theo Enemy3
+        if (isDying(e)) return;
+
+        long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
+        if (now >= readyAt) {
+            try { e.startAttack(); } catch (Throwable ignore) {}
+            int dmg = Enemy3.BASE_DAMAGE;
+            boolean playerDead = safeTakeDamage(p, dmg);
+            if (combatListener != null) combatListener.onPlayerHit();
+            nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
+        }
+
+        if (now >= nextPlayerAttackAtMs) {
+            try { p.startAttack(); } catch (Throwable ignore) {}
+            int hp = enemyHp.getOrDefault(e, 1);
+            hp = Math.max(0, hp - PLAYER_DAMAGE);
+            enemyHp.put(e, hp);
+            nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
+            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+        }
+    }
+
+    private boolean isDying(Enemy e) {
+        try { return e.getState().toString().equals("DIE"); }
+        catch (Throwable ignore) { return false; }
+    }
+
+    // ==== Cleanup dead ====
+    private void cleanupDead(List<Enemy> list) {
+        for (int i = list.size() - 1; i >= 0; i--) {
+            Enemy e = list.get(i);
             boolean dieState = false;
             try { dieState = e.getState().toString().equals("DIE"); } catch (Throwable ignore) {}
             if (dieState && e.isDieAnimDone()) {
-                enemies.remove(i);
+                list.remove(i);
                 enemyHp.remove(e);
                 nextEnemyAttackAtMs.remove(e);
             }
         }
     }
 
+    // ==== Damage helpers ====
     private boolean safeTakeDamage(Player p, int dmg) {
-        try {
-            return p.takeDamage(dmg); // trả về true nếu Player chết (theo GameView cũ)
-        } catch (Throwable ignore) {
-            // nếu Player.takeDamage khác chữ ký, đừng crash
-            return false;
-        }
+        try { return p.takeDamage(dmg); } catch (Throwable ignore) { return false; }
     }
 
-    public void applyBulletHit(Enemy e, int dmg){
+    public void applyBulletHit(Enemy e, int dmg) {
         Integer hp = enemyHp.get(e);
         if (hp == null) return;
         hp -= dmg;
-        if (hp <= 0){
+        if (hp <= 0) {
             enemyHp.put(e, 0);
-            e.onDie(); // đã có trong Enemy
+            e.onDie();
         } else {
             enemyHp.put(e, hp);
-            // nếu có trạng thái HURT trong Enemy, bạn có thể gọi e.hurt() (nếu đã định nghĩa)
-            //try { e.hurt(); } catch (Throwable ignore) {}
         }
     }
 
+    // --- NO-OVERLAP CHECK (circle vs circle) ---
+    private boolean isOverlapCircle(Player p, Enemy e, float marginPx) {
+        float pcx = p.x + p.w / 2f, pcy = p.y + p.h / 2f;
+        float ecx = e.x + e.w / 2f, ecy = e.y + e.h / 2f;
 
-    /** Vẽ quái + thanh máu dựa trên kích thước sprite thật */
+        float pr = Math.min(p.w, p.h) / 2f;
+        float er = Math.min(e.w, e.h) / 2f;
+
+        float minDist = pr + er + marginPx; // margin=0: “sát rạt” vẫn OK, không đẩy
+        float dx = pcx - ecx, dy = pcy - ecy;
+        return (dx*dx + dy*dy) < (minDist * minDist);
+    }
+
+    // ==== Draw ====
     public void draw(Canvas c, int cameraX, int cameraY) {
-        for (Enemy e : enemies) {
-            // Vẽ sprite quái
-            e.draw(c, cameraX, cameraY, sharedPaint);
+        for (Enemy e : enemies1) drawEnemyWithHp(c, e, cameraX, cameraY);
+        for (Enemy e : enemies2) drawEnemyWithHp(c, e, cameraX, cameraY);
+        for (Enemy e : enemies3) drawEnemyWithHp(c, e, cameraX, cameraY);
+    }
 
-            // --- Tính kích thước/tham số thanh máu theo sprite thật ---
-            final int hp = enemyHp.getOrDefault(e, ENEMY_MAX_HP);
-            final float ratio = Math.max(0f, Math.min(1f, (float) hp / ENEMY_MAX_HP));
+    private void drawEnemyWithHp(Canvas c, Enemy e, int cameraX, int cameraY) {
+        e.draw(c, cameraX, cameraY, sharedPaint);
 
-            // Kích thước sprite gốc (không scale)
-            final float sprW = e.getSpriteW();
-            final float sprH = e.getSpriteH();
+        int maxHp = (e instanceof Enemy2) ? Enemy2.BASE_HP :
+                (e instanceof Enemy3) ? Enemy3.BASE_HP : Enemy.BASE_HP;
+        final int hp = enemyHp.getOrDefault(e, maxHp);
+        final float ratio = Math.max(0f, Math.min(1f, (float) hp / maxHp));
 
-            // NOTE: Nếu anim đang scale hiển thị khác, bạn có thể thay bằng kích thước hiển thị thực tế
-            final float barW = e.w; // chỉnh theo nhu cầu
-            final float barH = 10f;
-            final float gapY = 20f;
+        final float barW = e.w, barH = 10f, gapY = 20f;
+        final float screenX = e.x - cameraX, screenY = e.y - cameraY;
+        final float barX = screenX + (e.w - barW) / 2f, barY = screenY - gapY - barH;
 
-            // Toạ độ đã trừ camera
-            final float screenX = e.x - cameraX;
-            final float screenY = e.y - cameraY;
-
-            // Canh giữa thanh máu với sprite bên trong bounding box
-            final float barX = screenX + (e.w - barW) / 2f;
-            final float barY = screenY - gapY - barH;
-
-            // Nền xám
-            c.drawRect(barX, barY, barX + barW, barY + barH, hpBgPaint);
-            // Máu đỏ còn lại
-            c.drawRect(barX, barY, barX + barW * ratio, barY + barH, hpPaint);
-        }
+        c.drawRect(barX, barY, barX + barW, barY + barH, hpBgPaint);
+        c.drawRect(barX, barY, barX + barW * ratio, barY + barH, hpPaint);
     }
 }

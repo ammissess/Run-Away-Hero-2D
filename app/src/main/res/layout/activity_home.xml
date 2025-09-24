@@ -92,10 +92,10 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
             android:text="Chọn cấp độ"
             android:textColor="#333333"
-            android:textSize="20sp"
-            android:layout_marginBottom="4dp"/>
+            android:textSize="20sp" />
 
         <Spinner
             android:id="@+id/spinner_level"
@@ -125,8 +125,8 @@
             android:id="@+id/button_start"
             android:layout_width="match_parent"
             android:layout_height="56dp"
+            android:backgroundTint="#1976D2"
             android:text="START GAME"
-            android:textColor="@android:color/white"
-            android:backgroundTint="#1976D2"/>
+            android:textColor="@android:color/white" />
     </LinearLayout>
 </FrameLayout>

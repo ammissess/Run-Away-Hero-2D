@@ -16,6 +16,7 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
+import com.example.game2dfighting.game.entity.Heart;
 
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Player;
@@ -126,6 +127,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private boolean showDebugBounds = true; // bật/tắt vẽ viền
     private final Paint debugPaintPlayer = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint debugPaintEnemy  = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    // ================== HEARTS (HP pickup) ==================
+    private Bitmap bmpHeart;
+    private final List<Heart> hearts = new ArrayList<>();
+    private long lastHeartSpawnAtMs = 0L;
+    private static final long HEART_SPAWN_INTERVAL_MS = 5000L; // 5s xuất hiện 1 trái tim
+    private static final int HEART_HEAL_HP = 10;
+    private static final int HEART_MAX_ON_MAP = 3; // tránh spam (tuỳ chỉnh)
+
+    // SFX khi nhặt tim (tuỳ chọn)
+    private int sfxPickupId = 0;
+
 
     public GameView(Context context) {
         super(context);
@@ -263,6 +276,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         islandX = (skyW - mapWidth) / 2;
         islandY = (skyH - mapHeight) / 2;
+
+        // HEART BITMAP
+        Bitmap heartSrc = BitmapFactory.decodeResource(getResources(), R.drawable.heart);
+// (tuỳ) scale nhỏ lại nếu ảnh gốc to quá:
+        int heartW = Math.round(dp(20));
+        int heartH = Math.round(dp(20));
+        bmpHeart = Bitmap.createScaledBitmap(heartSrc, heartW, heartH, true);
+
+// Để xuất hiện trái tim ngay từ đầu sau 5s
+        lastHeartSpawnAtMs = System.currentTimeMillis();
+
 
         // CLOUDS ...
         bmpCloud = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_clouds);
@@ -406,6 +430,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     if (hit) { b.alive = false; bullets.remove(i); }
                 }
 
+                // === HEARTS ===
+                maybeSpawnHeart();
+                updateHeartsAndPickup();
+
                 if (player.getHp() <= 0) {
                     gameOver = true;
                     timerPaused = true;
@@ -447,6 +475,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             sfxWallId = soundPool.load(getContext(), R.raw.wall_bump, 1);
             sfxPlayerHurtId = soundPool.load(getContext(), R.raw.player_hurt, 1);
             sfxRunStepId = soundPool.load(getContext(), R.raw.run_step1, 1);
+            sfxPickupId = soundPool.load(getContext(), R.raw.pickup, 1);
             soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
                 if (status == 0 && sampleId == sfxFireId) sfxLoaded = true;
             });
@@ -635,6 +664,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
 
         drawEntityBounds(canvas);
+
+        // 5.5) HEARTS
+        drawHearts(canvas);
+
 
         // 6) POINTS
         drawPointsOnIsland(canvas);
@@ -917,5 +950,62 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             // c.drawCircle(el + en.w/2f, et + en.h/2f, dp(2), debugPaintEnemy); // chấm tâm (tuỳ chọn)
         }
     }
+
+    private void maybeSpawnHeart() {
+        long now = System.currentTimeMillis();
+        if (now - lastHeartSpawnAtMs < HEART_SPAWN_INTERVAL_MS) return;
+        if (bmpHeart == null) return;
+        if (hearts.size() >= HEART_MAX_ON_MAP) { // giới hạn số lượng đang tồn tại
+            lastHeartSpawnAtMs = now;
+            return;
+        }
+
+        Rect pr = getPlayableRect();
+        int margin = 40;
+        int maxX = Math.max(1, pr.width()  - bmpHeart.getWidth()  - margin * 2);
+        int maxY = Math.max(1, pr.height() - bmpHeart.getHeight() - margin * 2);
+        if (maxX <= 0 || maxY <= 0) return;
+
+        int hx = pr.left + random.nextInt(maxX) + margin;
+        int hy = pr.top  + random.nextInt(maxY) + margin;
+
+        hearts.add(new Heart(hx, hy, bmpHeart));
+        lastHeartSpawnAtMs = now;
+    }
+
+    private void updateHeartsAndPickup() {
+        if (player == null) return;
+        Rect pRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
+
+        for (int i = hearts.size() - 1; i >= 0; i--) {
+            Heart h = hearts.get(i);
+            if (h.isConsumed()) { hearts.remove(i); continue; }
+            if (Rect.intersects(pRect, h.getHitbox())) {
+                player.setHp(Math.min(player.getMaxHp(), player.getHp() + HEART_HEAL_HP));
+                h.consume();
+                hearts.remove(i);
+                playPickupSfx();
+            }
+        }
+    }
+
+    private void playPickupSfx() {
+        if (paused) return;
+        if (!soundEnabled) return;
+        if (soundPool == null || !sfxLoaded) return;
+        if (sfxPickupId == 0) return;
+        soundPool.play(sfxPickupId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+    }
+
+    private void drawHearts(Canvas canvas) {
+        if (hearts.isEmpty()) return;
+        float offX = cameraX - islandX;
+        float offY = cameraY - islandY;
+        for (Heart h : hearts) {
+            h.draw(canvas, offX, offY);
+        }
+    }
+
+
 
 }
