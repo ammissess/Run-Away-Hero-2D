@@ -17,8 +17,8 @@ public class Enemy extends GameObject {
     private final Context ctx;
 
     // === Tham số stats cơ bản cho Enemy loại 1 ===
-    public static final int BASE_HP     = 30;
-    public static final int BASE_SPEED  = 6;
+    public static final int BASE_HP     = 10;
+    public static final int BASE_SPEED  = 1;
     public static final int BASE_DAMAGE = 3;
 
     // speed thực tế khi di chuyển

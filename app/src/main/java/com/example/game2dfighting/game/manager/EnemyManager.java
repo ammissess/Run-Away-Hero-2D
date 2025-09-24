@@ -42,10 +42,10 @@ public class EnemyManager {
     private long lastSpawn2 = 0L;
     private long lastSpawn3 = 0L;
 
-    // Giới hạn tối đa độc lập (ban đầu 3, mỗi 10s +1)
-    private static final int BASE_MAX_1 = 3;
-    private static final int BASE_MAX_2 = 3;
-    private static final int BASE_MAX_3 = 3;
+    // Giới hạn tối đa độc lập (ban đầu 1, mỗi 10s +1)
+    private static final int BASE_MAX_1 = 1;
+    private static final int BASE_MAX_2 = 1;
+    private static final int BASE_MAX_3 = 1;
 
     // Combat config chung
     private static final float ATTACK_RANGE_PADDING = 12f;

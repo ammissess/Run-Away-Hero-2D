@@ -23,6 +23,9 @@ import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.manager.EnemyManager;
 import com.example.game2dfighting.game.projectile.Bullet;
+import com.example.game2dfighting.game.entity.Boss;
+import com.example.game2dfighting.game.manager.BossManager;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +44,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     // Entities
     private Player player;
     private EnemyManager enemyMgr;
+    private BossManager bossMgr;
 
     // Input
     private boolean movingUp, movingDown, movingLeft, movingRight;
@@ -266,6 +270,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             @Override public void onPlayerHit() { playPlayerHurtSfx(); }
         });
 
+        // Boss: xuất hiện sau 50s
+        bossMgr = new BossManager(getContext(), mapWidth, mapHeight); // mặc định 50_000ms
+
         // SKY
         Bitmap srcSky = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_sky);
         int viewW = getWidth(), viewH = getHeight();
@@ -408,6 +415,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player, dtMs);
 
+                // boss
+                if (bossMgr != null) {
+                    bossMgr.maybeSpawn();
+                    bossMgr.update(player, dtMs);
+                }
+
                 // NEW: đảm bảo enemy không lọt ra viền map
                 clampEnemiesToPlayable();
 
@@ -419,6 +432,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     if (!b.alive) { bullets.remove(i); continue; }
 
                     boolean hit = false;
+
+                    // --- Enemy collision ---
                     for (Enemy en : enemyMgr.list()) {
                         try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
                         if (b.hit(en)) {
@@ -427,8 +442,50 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                             break;
                         }
                     }
+
+                    // --- Boss collision (nếu chưa trúng enemy) ---
+                    if (!hit && bossMgr != null && bossMgr.isActive()) {
+                        Boss boss = bossMgr.getBoss();
+                        if (boss != null && boss.getState() != Boss.State.DIE) {
+                            // Ưu tiên: nếu Bullet có API "hit(Boss)" thì gọi thử
+                            boolean bossHit = false;
+                            try {
+                                // thử tìm hàm b.hit(Boss)
+                                bossHit = (boolean) b.getClass().getMethod("hit", Boss.class).invoke(b, boss);
+                            } catch (Throwable ignore) {
+                                // Fallback: tự kiểm tra AABB nếu Bullet có x,y,w,h
+                                try {
+                                    float bx = (float) b.getClass().getField("x").get(b);
+                                    float by = (float) b.getClass().getField("y").get(b);
+                                    int   bw = (int)   b.getClass().getField("w").get(b);
+                                    int   bh = (int)   b.getClass().getField("h").get(b);
+                                    Rect br = new Rect((int)bx, (int)by, (int)(bx + bw), (int)(by + bh));
+                                    Rect bossR = new Rect(boss.x, boss.y, boss.x + boss.w, boss.y + boss.h);
+                                    bossHit = Rect.intersects(br, bossR);
+                                } catch (Throwable ignore2) {
+                                    // Fallback 2: approx theo tâm nếu không có w/h
+                                    try {
+                                        float bx = (float) b.getClass().getField("x").get(b);
+                                        float by = (float) b.getClass().getField("y").get(b);
+                                        float cx = boss.x + boss.w / 2f;
+                                        float cy = boss.y + boss.h / 2f;
+                                        float dx = bx - cx, dy = by - cy;
+                                        float rad = Math.min(boss.w, boss.h) / 2f;
+                                        bossHit = (dx*dx + dy*dy) <= (rad * rad);
+                                    } catch (Throwable ignore3) { /* đành chịu nếu Bullet quá khác API */ }
+                                }
+                            }
+
+                            if (bossHit) {
+                                hit = true;
+                                bossMgr.applyBulletHit(b.damage);
+                            }
+                        }
+                    }
+
                     if (hit) { b.alive = false; bullets.remove(i); }
                 }
+
 
                 // === HEARTS ===
                 maybeSpawnHeart();
@@ -584,18 +641,33 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         atBottomEdge = hitNowBottom;
     }
 
-    // === NEW: clamp toàn bộ enemy vào playable rect (gọi mỗi frame) ===
+    // === NEW: clamp toàn bộ enemy + boss vào playable rect (gọi mỗi frame) ===
     private void clampEnemiesToPlayable() {
-        if (enemyMgr == null) return;
         Rect pr = getPlayableRect();
-        for (Enemy en : enemyMgr.list()) {
-            try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
-            if (en.x < pr.left) en.x = pr.left;
-            if (en.y < pr.top)  en.y = pr.top;
-            if (en.x + en.w > pr.right)  en.x = pr.right  - en.w;
-            if (en.y + en.h > pr.bottom) en.y = pr.bottom - en.h;
+
+        // Enemies
+        if (enemyMgr != null) {
+            for (Enemy en : enemyMgr.list()) {
+                try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+                if (en.x < pr.left) en.x = pr.left;
+                if (en.y < pr.top)  en.y = pr.top;
+                if (en.x + en.w > pr.right)  en.x = pr.right  - en.w;
+                if (en.y + en.h > pr.bottom) en.y = pr.bottom - en.h;
+            }
+        }
+
+        // Boss
+        if (bossMgr != null && bossMgr.isActive()) {
+            Boss b = bossMgr.getBoss();
+            if (b != null) {
+                if (b.x < pr.left) b.x = pr.left;
+                if (b.y < pr.top)  b.y = pr.top;
+                if (b.x + b.w > pr.right)  b.x = pr.right  - b.w;
+                if (b.y + b.h > pr.bottom) b.y = pr.bottom - b.h;
+            }
         }
     }
+
 
 
 
@@ -657,6 +729,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // 4) ENTITIES
         player.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
         enemyMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
+        // Boss (nếu đã spawn)
+        if (bossMgr != null) {
+            bossMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
+        }
+
 
         // 5) BULLETS
         for (Bullet b : bullets) {
@@ -667,7 +744,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // 5.5) HEARTS
         drawHearts(canvas);
-
 
         // 6) POINTS
         drawPointsOnIsland(canvas);
@@ -861,26 +937,47 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private void tryShootAtNearestEnemy() {
         long now = System.currentTimeMillis();
         if (now < nextShootAtMs) return;
-        if (player == null || enemyMgr == null) return;
+        if (player == null) return;
 
-        Enemy target = null;
-        float bestD2 = Float.MAX_VALUE;
         float px = player.centerX();
         float py = player.centerY();
 
-        for (Enemy en : enemyMgr.list()) {
-            try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
-            float ex = en.x + en.w / 2f;
-            float ey = en.y + en.h / 2f;
-            float dx = ex - px, dy = ey - py;
-            float d2 = dx*dx + dy*dy;
-            if (d2 < bestD2) { bestD2 = d2; target = en; }
+        // Tìm mục tiêu gần nhất: trong enemies + boss
+        float bestD2 = Float.MAX_VALUE;
+        float tx = Float.NaN, ty = Float.NaN;
+        boolean targetIsBoss = false;
+
+        // 1) enemies
+        if (enemyMgr != null) {
+            for (Enemy en : enemyMgr.list()) {
+                try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+                float ex = en.x + en.w / 2f;
+                float ey = en.y + en.h / 2f;
+                float dx = ex - px, dy = ey - py;
+                float d2 = dx*dx + dy*dy;
+                if (d2 < bestD2) {
+                    bestD2 = d2; tx = ex; ty = ey; targetIsBoss = false;
+                }
+            }
         }
 
-        if (target != null) {
+        // 2) boss
+        if (bossMgr != null && bossMgr.isActive()) {
+            Boss b = bossMgr.getBoss();
+            if (b != null && b.getState() != Boss.State.DIE) {
+                float bx = b.x + b.w / 2f;
+                float by = b.y + b.h / 2f;
+                float dx = bx - px, dy = by - py;
+                float d2 = dx*dx + dy*dy;
+                if (d2 < bestD2) {
+                    bestD2 = d2; tx = bx; ty = by; targetIsBoss = true;
+                }
+            }
+        }
+
+        if (!Float.isNaN(tx)) {
             Bullet b = player.spawnBulletToward(
-                    target.x + target.w / 2f,
-                    target.y + target.h / 2f,
+                    tx, ty,
                     mapWidth, mapHeight,
                     getContext()
             );
@@ -889,6 +986,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             playFireSfx();
         }
     }
+
 
     // ===== SFX (đã tôn trọng soundEnabled) =====
     private void playFireSfx() {

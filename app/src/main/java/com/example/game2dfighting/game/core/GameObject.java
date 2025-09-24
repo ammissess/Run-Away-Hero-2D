@@ -48,7 +48,7 @@ public abstract class GameObject {
     }
 
     public void draw(Canvas c, int cameraX, int cameraY, Paint p) {
-        if (currentAnim == null) return;          // ⬅️ Không vẽ gì nếu chưa có frame
+        if (currentAnim == null) return;
 
         float sx = x - cameraX;
         float sy = y - cameraY;
