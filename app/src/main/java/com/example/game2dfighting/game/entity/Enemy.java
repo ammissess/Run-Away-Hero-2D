@@ -21,6 +21,9 @@ public class Enemy extends GameObject {
     public static final int BASE_SPEED  = 1;
     public static final int BASE_DAMAGE = 3;
 
+    private float speedMultiplier = 1.0f;
+    private long slowUntilMs = 0L;
+
     // speed thực tế khi di chuyển
     protected int speed = BASE_SPEED;
 
@@ -105,8 +108,20 @@ public class Enemy extends GameObject {
         }
 
         int dx = 0, dy = 0;
-        if (targetX < x) dx = -speed; else if (targetX > x) dx = speed;
-        if (targetY < y) dy = -speed; else if (targetY > y) dy = speed;
+        // reset slow khi hết hạn
+        if (slowUntilMs > 0 && System.currentTimeMillis() > slowUntilMs) {
+            speedMultiplier = 1.0f;
+            slowUntilMs = 0L;
+        }
+
+        float realSpeed = speed * speedMultiplier;
+
+        if (targetX < x) dx = (int)-realSpeed;
+        else if (targetX > x) dx = (int)realSpeed;
+
+        if (targetY < y) dy = (int)-realSpeed;
+        else if (targetY > y) dy = (int)realSpeed;
+
 
         if (dx < 0) setFacingLeft(true);
         else if (dx > 0) setFacingLeft(false);
@@ -193,4 +208,10 @@ public class Enemy extends GameObject {
             setState(State.IDLE);
         } catch (Exception ignore) {}
     }
+
+    public void applySlow(float multiplier, long durationMs) {
+        this.speedMultiplier = multiplier;
+        this.slowUntilMs = System.currentTimeMillis() + durationMs;
+    }
+
 }

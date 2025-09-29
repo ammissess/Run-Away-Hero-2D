@@ -44,7 +44,10 @@ public class Boss extends GameObject {
 
     // ===== State/render =====
     protected Map<State, SpriteAnim> anims = new HashMap<>();
-    private int speed = BASE_SPEED;
+    private float speedMultiplier = 1.0f;
+    private long slowUntilMs = 0L;
+    private int baseSpeed = BASE_SPEED;
+
 
     // Kích thước sprite gốc (nếu cần vẽ gì theo size gốc)
     private int spriteW, spriteH;
@@ -129,9 +132,20 @@ public class Boss extends GameObject {
         if (state == State.DIE) { update(dtMs); return; }
         if (isAnimLocked())     { update(dtMs); return; } // ATTACK lock
 
+        // reset slow khi hết hạn
+        if (slowUntilMs > 0 && System.currentTimeMillis() > slowUntilMs) {
+            speedMultiplier = 1.0f;
+            slowUntilMs = 0L;
+        }
+
+        float realSpeed = baseSpeed * speedMultiplier;
+
         int dx = 0, dy = 0;
-        if (targetX < x) dx = -speed; else if (targetX > x) dx = speed;
-        if (targetY < y) dy = -speed; else if (targetY > y) dy = speed;
+        if (targetX < x) dx = (int)-realSpeed;
+        else if (targetX > x) dx = (int)realSpeed;
+        if (targetY < y) dy = (int)-realSpeed;
+        else if (targetY > y) dy = (int)realSpeed;
+
 
         if (dx < 0) setFacingLeft(true);
         else if (dx > 0) setFacingLeft(false);
@@ -169,6 +183,12 @@ public class Boss extends GameObject {
     // ====== Render/Update ======
     @Override
     public void update(long dtMs) {
+        // reset slow khi hết hạn
+        if (slowUntilMs > 0 && System.currentTimeMillis() > slowUntilMs) {
+            speedMultiplier = 1.0f;
+            slowUntilMs = 0L;
+        }
+
         // Update anim đang active
         if (isHurting() && hasHurtAnim && hurtAnim != null) {
             hurtAnim.update(dtMs);
@@ -247,4 +267,10 @@ public class Boss extends GameObject {
             setState(State.IDLE);
         } catch (Exception ignore) {}
     }
+
+    public void applySlow(float multiplier, long durationMs) {
+        this.speedMultiplier = multiplier;
+        this.slowUntilMs = System.currentTimeMillis() + durationMs;
+    }
+
 }

@@ -27,6 +27,7 @@ import com.example.game2dfighting.game.manager.BossManager;
 import com.example.game2dfighting.game.manager.PlayerManager;
 import com.example.game2dfighting.game.manager.PlayerManager.SkillType;
 import com.example.game2dfighting.game.skill.Fireball;
+import com.example.game2dfighting.game.skill.IceSpike;
 import com.example.game2dfighting.ui.PlayerHudRenderer;
 
 import java.util.ArrayList;
@@ -100,9 +101,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     // ================== PROJECTILES (Fireball) ==================
     private final List<Fireball> fireballs = new ArrayList<>();
 
+    // ================== PROJECTILES (IceSpike) ==================
+    private final List<IceSpike> icespikes = new ArrayList<>();
+    private Bitmap bmpIceSpike; // sprite đạn băng
+
     // UI buttons: fire & pause
     private Rect fireBtnRect;
     private float fireBtnRadiusPx;
+    private Rect iceBtnRect;          // NEW
+    private float iceBtnRadiusPx;     // NEW
     private Rect pauseBtnRect;
     private float pauseBtnRadiusPx;
 
@@ -321,6 +328,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             clouds.add(new Cloud(x, y, v, scale, alpha, parallax, baseW, baseH));
         }
 
+
+
         // Points
         if (points.isEmpty()) {
             Rect pr = getPlayableRect();
@@ -491,6 +500,42 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     if (hit) { b.alive = false; fireballs.remove(i); }
                 }
 
+                // ===== Update & cleanup ICESPIKES =====
+                for (int i = icespikes.size() - 1; i >= 0; i--) {
+                    IceSpike spike = icespikes.get(i);
+                    try { spike.update(dtSec); } catch (Throwable ignore) {}
+                    if (!spike.alive) { icespikes.remove(i); continue; }
+
+                    boolean hit = false;
+
+                    // Enemy collision
+                    for (Enemy en : enemyMgr.list()) {
+                        try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+                        if (spike.hit(en)) {
+                            hit = true;
+                            enemyMgr.applyBulletHit(en, spike.damage);
+                            break;
+                        }
+                    }
+
+                    // Boss collision (nếu chưa trúng enemy)
+                    if (!hit && bossMgr != null && bossMgr.isActive()) {
+                        Boss boss = bossMgr.getBoss();
+                        if (boss != null && boss.getState() != Boss.State.DIE) {
+                            if (spike.hit(boss)) {
+                                hit = true;
+                                bossMgr.applyBulletHit(spike.damage);
+                            }
+                        }
+                    }
+
+                    if (hit) {
+                        spike.alive = false;
+                        icespikes.remove(i);
+                    }
+                }
+
+
                 // === HEARTS ===
                 maybeSpawnHeart();
                 updateHeartsAndPickup();
@@ -614,6 +659,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     tryShootAtNearestEnemy();
                     return true;
                 }
+                // Ice
+                if (playerHud != null && playerHud.isInIceButton(tx, ty)) {
+                    tryShootIceAtNearestEnemy();
+                    return true;
+                }
+
                 break;
             }
         }
@@ -733,6 +784,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         for (Fireball b : fireballs) {
             b.draw(canvas, cameraX - islandX, cameraY - islandY);
         }
+        // 5b) ICESPIKES
+        for (IceSpike s : icespikes) {
+            s.draw(canvas, cameraX - islandX, cameraY - islandY);
+        }
 
         // Debug
         drawEntityBounds(canvas);
@@ -745,11 +800,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // 7) HUD + Buttons
         if (playerHud != null) {
-            playerHud.draw(canvas, player, getWidth(), getHeight());
+            playerHud.draw(canvas, player, getWidth(), getHeight()); // nếu bạn đã có hàm draw tổng
+            playerHud.drawFireButton(canvas); // NEW: vẽ nút bắn bằng PNG
+            playerHud.drawIceButton(canvas);
         }
         drawTimer(canvas);
         drawPauseButton(canvas);
-        drawFireButton(canvas);
 
         // Overlay pause
         if (paused) {
@@ -819,6 +875,22 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         fireBtnRect = new Rect(fireLeft, fireTop, fireLeft + fireSize, fireTop + fireSize);
         fireBtnRadiusPx = fireSize / 2f;
 
+        // Ice button: bên trái Fire
+        int gap = (int) (12 * getResources().getDisplayMetrics().density);
+        int iceLeft = fireLeft - gap - fireSize;
+        int iceTop  = fireTop;
+        iceBtnRect = new Rect(iceLeft, iceTop, iceLeft + fireSize, iceTop + fireSize);
+        iceBtnRadiusPx = fireBtnRadiusPx;
+
+        // Sync HUD
+        if (playerHud != null) {
+            playerHud.setFireButtonBounds(fireBtnRect, fireBtnRadiusPx);
+            playerHud.setFireballButtonImage(R.drawable.fireball_button, fireBtnRect.width());
+
+            playerHud.setIceButtonBounds(iceBtnRect, iceBtnRadiusPx);
+            playerHud.setIceButtonImage(R.drawable.icespike_button, iceBtnRect.width());
+        }
+
         // Pause top-right
         int pauseSize = (int) (64 * getResources().getDisplayMetrics().density);
         int pauseLeft = w - margin - pauseSize;
@@ -879,7 +951,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private boolean isInFireButton(float x, float y) {
-        return fireBtnRect != null && fireBtnRect.contains((int) x, (int) y);
+        return playerHud != null && playerHud.isInFireButton(x, y);
     }
     private boolean isInPauseButton(float x, float y) {
         return pauseBtnRect != null && pauseBtnRect.contains((int) x, (int) y);
@@ -943,7 +1015,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         if (!Float.isNaN(tx)) {
             // NEW: xin skill từ PlayerManager (tự check cooldown + trừ energy/mana)
-            Fireball fb = playerMgr.tryUseSkill(SkillType.FIREBALL, tx, ty);
+            Fireball fb = playerMgr.tryUseFireball(tx, ty);
             if (fb != null) {
                 fireballs.add(fb);
                 playFireSfx();
@@ -953,6 +1025,49 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
     }
+
+    private void tryShootIceAtNearestEnemy() {
+        if (player == null || playerMgr == null) return;
+
+        float px = player.centerX();
+        float py = player.centerY();
+
+        float bestD2 = Float.MAX_VALUE;
+        float tx = Float.NaN, ty = Float.NaN;
+
+        // 1) Enemy
+        if (enemyMgr != null) {
+            for (Enemy en : enemyMgr.list()) {
+                try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
+                float ex = en.x + en.w / 2f;
+                float ey = en.y + en.h / 2f;
+                float dx = ex - px, dy = ey - py;
+                float d2 = dx*dx + dy*dy;
+                if (d2 < bestD2) { bestD2 = d2; tx = ex; ty = ey; }
+            }
+        }
+
+        // 2) Boss
+        if (bossMgr != null && bossMgr.isActive()) {
+            Boss b = bossMgr.getBoss();
+            if (b != null && b.getState() != Boss.State.DIE) {
+                float bx = b.x + b.w / 2f;
+                float by = b.y + b.h / 2f;
+                float dx = bx - px, dy = by - py;
+                float d2 = dx*dx + dy*dy;
+                if (d2 < bestD2) { bestD2 = d2; tx = bx; ty = by; }
+            }
+        }
+
+        if (!Float.isNaN(tx)) {
+            IceSpike spike = playerMgr.tryUseIceSpike(tx, ty);
+            if (spike != null) {
+                icespikes.add(spike);
+                // TODO: playIceSfx();
+            }
+        }
+    }
+
 
     // ===== SFX =====
     private void playFireSfx() {

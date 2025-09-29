@@ -3,16 +3,16 @@ package com.example.game2dfighting.game.manager;
 import android.content.Context;
 
 import com.example.game2dfighting.game.entity.Player;
-import com.example.game2dfighting.game.skill.Fireball; // thay Bullet = Fireball
-
+import com.example.game2dfighting.game.skill.Fireball;
+import com.example.game2dfighting.game.skill.IceSpike;
 import java.util.EnumMap;
 import java.util.Map;
 
 public class PlayerManager {
 
     public enum SkillType {
-        FIREBALL // cầu lửa
-        // TODO: thêm kỹ năng khác ở đây
+        FIREBALL, // cầu lửa
+        ICESPIKE  // mũi băng
     }
 
     public static class SkillConfig {
@@ -52,6 +52,13 @@ public class PlayerManager {
                 0       // không tốn mana
         ));
 
+        // cấu hình mặc định: mũi băng
+        configs.put(SkillType.ICESPIKE, new SkillConfig(
+                500L,   // cooldown 0.5s
+                4,      // tốn 4 energy
+                0       // không tốn mana
+        ));
+
         long now = System.currentTimeMillis();
         for (SkillType t : SkillType.values()) {
             readyAt.put(t, now);
@@ -76,7 +83,8 @@ public class PlayerManager {
     }
 
     /** Thử dùng kỹ năng. Trả về Fireball nếu cast thành công, null nếu không. */
-    public Fireball tryUseSkill(SkillType type, float targetWorldX, float targetWorldY) {
+    /** Thử dùng kỹ năng. Trả về projectile (Fireball/IceSpike) nếu cast thành công, null nếu không. */
+    public Object tryUseSkill(SkillType type, float targetWorldX, float targetWorldY) {
         if (player == null) return null;
         SkillConfig cfg = configs.get(type);
         if (cfg == null) return null;
@@ -95,10 +103,20 @@ public class PlayerManager {
 
         switch (type) {
             case FIREBALL:
-                // tái sử dụng hàm trong Player để tạo Fireball
                 return player.shootFireballToward(targetWorldX, targetWorldY, mapW, mapH, ctx);
+            case ICESPIKE:
+                return player.shootIceSpikeToward(targetWorldX, targetWorldY, mapW, mapH, ctx);
         }
         return null;
+    }
+
+    // === Overload cho từng skill ===
+    public Fireball tryUseFireball(float tx, float ty) {
+        return (Fireball) tryUseSkill(SkillType.FIREBALL, tx, ty);
+    }
+
+    public IceSpike tryUseIceSpike(float tx, float ty) {
+        return (IceSpike) tryUseSkill(SkillType.ICESPIKE, tx, ty);
     }
 
     public long getRemainingCooldownMs(SkillType type) {
