@@ -16,16 +16,18 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
-import com.example.game2dfighting.game.entity.Heart;
 
 import com.example.game2dfighting.R;
+import com.example.game2dfighting.game.entity.Heart;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
-import com.example.game2dfighting.game.manager.EnemyManager;
-import com.example.game2dfighting.game.projectile.Bullet;
 import com.example.game2dfighting.game.entity.Boss;
+import com.example.game2dfighting.game.manager.EnemyManager;
 import com.example.game2dfighting.game.manager.BossManager;
-
+import com.example.game2dfighting.game.manager.PlayerManager;
+import com.example.game2dfighting.game.manager.PlayerManager.SkillType;
+import com.example.game2dfighting.game.skill.Fireball;
+import com.example.game2dfighting.ui.PlayerHudRenderer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +47,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Player player;
     private EnemyManager enemyMgr;
     private BossManager bossMgr;
+
+    // NEW: HUD & PlayerManager
+    private PlayerHudRenderer playerHud;
+    private PlayerManager playerMgr;
 
     // Input
     private boolean movingUp, movingDown, movingLeft, movingRight;
@@ -91,10 +97,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private volatile boolean gameOver = false;
 
-    // ================== BULLETS ==================
-    private final List<Bullet> bullets = new ArrayList<>();
-    private long nextShootAtMs = 0L;
-    private static final long SHOOT_COOLDOWN_MS = 250L;
+    // ================== PROJECTILES (Fireball) ==================
+    private final List<Fireball> fireballs = new ArrayList<>();
 
     // UI buttons: fire & pause
     private Rect fireBtnRect;
@@ -128,7 +132,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private boolean atLeftEdge = false, atRightEdge = false, atTopEdge = false, atBottomEdge = false;
 
     // ===== Debug bounds (outline) =====
-    private boolean showDebugBounds = true; // bật/tắt vẽ viền
+    private boolean showDebugBounds = false; // bật/tắt vẽ viền
     private final Paint debugPaintPlayer = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint debugPaintEnemy  = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -136,13 +140,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Bitmap bmpHeart;
     private final List<Heart> hearts = new ArrayList<>();
     private long lastHeartSpawnAtMs = 0L;
-    private static final long HEART_SPAWN_INTERVAL_MS = 5000L; // 5s xuất hiện 1 trái tim
+    private static final long HEART_SPAWN_INTERVAL_MS = 5000L; // 5s
     private static final int HEART_HEAL_HP = 10;
-    private static final int HEART_MAX_ON_MAP = 3; // tránh spam (tuỳ chỉnh)
+    private static final int HEART_MAX_ON_MAP = 3;
 
     // SFX khi nhặt tim (tuỳ chọn)
     private int sfxPickupId = 0;
-
 
     public GameView(Context context) {
         super(context);
@@ -154,13 +157,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // Debug paints
         debugPaintPlayer.setStyle(Paint.Style.STROKE);
-        debugPaintPlayer.setColor(Color.MAGENTA); // nhân vật: hồng
+        debugPaintPlayer.setColor(Color.MAGENTA);
         debugPaintPlayer.setStrokeWidth(dp(2));
 
         debugPaintEnemy.setStyle(Paint.Style.STROKE);
-        debugPaintEnemy.setColor(Color.GREEN);    // quái: xanh lá
+        debugPaintEnemy.setColor(Color.GREEN);
         debugPaintEnemy.setStrokeWidth(dp(2));
-
 
         // TIMER HUD setup...
         timerStartMs = System.currentTimeMillis();
@@ -190,7 +192,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         );
     }
 
-    private void initGame() { /* ... */ }
+    private void initGame() { /* optional if you keep in surfaceCreated */ }
 
     private float dp(float v) {
         return v * getResources().getDisplayMetrics().density;
@@ -232,7 +234,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         this.paused = paused;
         if (paused) {
             movingUp = movingDown = movingLeft = movingRight = false;
-            player.up = player.down = player.left = player.right = false;
+            if (player != null) {
+                player.up = player.down = player.left = player.right = false;
+            }
             if (!timerPaused) { timerPaused = true; pauseStartMs = System.currentTimeMillis(); }
         } else {
             if (timerPaused) { pausedAccumulatedMs += System.currentTimeMillis() - pauseStartMs; timerPaused = false; }
@@ -273,6 +277,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // Boss: xuất hiện sau 50s
         bossMgr = new BossManager(getContext(), mapWidth, mapHeight); // mặc định 50_000ms
 
+        // NEW: HUD + PlayerManager
+        playerHud = new PlayerHudRenderer(getContext());
+        playerMgr = new PlayerManager(getContext(), player, mapWidth, mapHeight);
+
         // SKY
         Bitmap srcSky = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_sky);
         int viewW = getWidth(), viewH = getHeight();
@@ -286,14 +294,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // HEART BITMAP
         Bitmap heartSrc = BitmapFactory.decodeResource(getResources(), R.drawable.heart);
-// (tuỳ) scale nhỏ lại nếu ảnh gốc to quá:
         int heartW = Math.round(dp(20));
         int heartH = Math.round(dp(20));
         bmpHeart = Bitmap.createScaledBitmap(heartSrc, heartW, heartH, true);
-
-// Để xuất hiện trái tim ngay từ đầu sau 5s
         lastHeartSpawnAtMs = System.currentTimeMillis();
-
 
         // CLOUDS ...
         bmpCloud = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_clouds);
@@ -385,13 +389,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
 
                 // input -> player
-                player.up = movingUp;
-                player.down = movingDown;
-                player.left = movingLeft;
-                player.right = movingRight;
+                if (player != null) {
+                    player.up = movingUp;
+                    player.down = movingDown;
+                    player.left = movingLeft;
+                    player.right = movingRight;
 
-                player.update(dtMs);
-                clampPlayerToMap();
+                    player.update(dtMs);
+                    clampPlayerToMap();
+                }
 
                 // RUN STEP SFX
                 boolean movedPixel = (player.x != lastPX) || (player.y != lastPY);
@@ -421,15 +427,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     bossMgr.update(player, dtMs);
                 }
 
-                // NEW: đảm bảo enemy không lọt ra viền map
+                // đảm bảo enemy/boss không lọt ra viền map
                 clampEnemiesToPlayable();
 
-                // bullets
+                // ===== NEW: PlayerManager regen/cooldown =====
+                if (playerMgr != null) playerMgr.update(dtMs);
+
+                // ===== Update & cleanup FIREBALLS =====
                 float dtSec = dtMs / 1000f;
-                for (int i = bullets.size() - 1; i >= 0; i--) {
-                    Bullet b = bullets.get(i);
-                    b.update(dtSec);
-                    if (!b.alive) { bullets.remove(i); continue; }
+                for (int i = fireballs.size() - 1; i >= 0; i--) {
+                    Fireball b = fireballs.get(i);
+                    try { b.update(dtSec); } catch (Throwable ignore) {}
+                    if (!b.alive) { fireballs.remove(i); continue; }
 
                     boolean hit = false;
 
@@ -447,13 +456,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     if (!hit && bossMgr != null && bossMgr.isActive()) {
                         Boss boss = bossMgr.getBoss();
                         if (boss != null && boss.getState() != Boss.State.DIE) {
-                            // Ưu tiên: nếu Bullet có API "hit(Boss)" thì gọi thử
                             boolean bossHit = false;
                             try {
-                                // thử tìm hàm b.hit(Boss)
                                 bossHit = (boolean) b.getClass().getMethod("hit", Boss.class).invoke(b, boss);
                             } catch (Throwable ignore) {
-                                // Fallback: tự kiểm tra AABB nếu Bullet có x,y,w,h
                                 try {
                                     float bx = (float) b.getClass().getField("x").get(b);
                                     float by = (float) b.getClass().getField("y").get(b);
@@ -463,7 +469,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                                     Rect bossR = new Rect(boss.x, boss.y, boss.x + boss.w, boss.y + boss.h);
                                     bossHit = Rect.intersects(br, bossR);
                                 } catch (Throwable ignore2) {
-                                    // Fallback 2: approx theo tâm nếu không có w/h
                                     try {
                                         float bx = (float) b.getClass().getField("x").get(b);
                                         float by = (float) b.getClass().getField("y").get(b);
@@ -472,7 +477,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                                         float dx = bx - cx, dy = by - cy;
                                         float rad = Math.min(boss.w, boss.h) / 2f;
                                         bossHit = (dx*dx + dy*dy) <= (rad * rad);
-                                    } catch (Throwable ignore3) { /* đành chịu nếu Bullet quá khác API */ }
+                                    } catch (Throwable ignore3) { /* bỏ qua nếu không có dữ liệu */ }
                                 }
                             }
 
@@ -483,9 +488,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                         }
                     }
 
-                    if (hit) { b.alive = false; bullets.remove(i); }
+                    if (hit) { b.alive = false; fireballs.remove(i); }
                 }
-
 
                 // === HEARTS ===
                 maybeSpawnHeart();
@@ -603,7 +607,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 // Pause (trên-phải)
                 if (isInPauseButton(tx, ty)) {
                     setPaused(!isPaused());
-                    // Khi resume từ pause: chỉ phát lại nhạc nếu musicEnabled → Activity đã xử lý
                     return true;
                 }
                 // Fire (dưới-phải)
@@ -641,7 +644,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         atBottomEdge = hitNowBottom;
     }
 
-    // === NEW: clamp toàn bộ enemy + boss vào playable rect (gọi mỗi frame) ===
+    // === clamp toàn bộ enemy + boss vào playable rect ===
     private void clampEnemiesToPlayable() {
         Rect pr = getPlayableRect();
 
@@ -668,9 +671,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
-
-
-
     private void clampCamera() {
         if (cameraX < 0) cameraX = 0;
         if (cameraY < 0) cameraY = 0;
@@ -682,7 +682,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
     private static class Point { int x,y; Point(int x,int y){this.x=x;this.y=y;} }
 
-
     private void updatePointsAndLevelUpIfNeeded() {
         Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
         for (int i = points.size() - 1; i >= 0; i--) {
@@ -692,7 +691,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 points.remove(i);
                 player.addMana(1);
 
-                // NEW: respawn trong playable rect (thụt 100px)
+                // respawn trong playable rect
                 Rect pr = getPlayableRect();
                 int x = pr.left + random.nextInt(Math.max(1, pr.width()  - 40)) + 20;
                 int y = pr.top  + random.nextInt(Math.max(1, pr.height() - 40)) + 20;
@@ -700,7 +699,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
     }
-
 
     // ===== Render =====
     private void render(Canvas canvas) {
@@ -729,17 +727,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // 4) ENTITIES
         player.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
         enemyMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
-        // Boss (nếu đã spawn)
-        if (bossMgr != null) {
-            bossMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
-        }
+        if (bossMgr != null) bossMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
 
-
-        // 5) BULLETS
-        for (Bullet b : bullets) {
+        // 5) FIREBALLS
+        for (Fireball b : fireballs) {
             b.draw(canvas, cameraX - islandX, cameraY - islandY);
         }
 
+        // Debug
         drawEntityBounds(canvas);
 
         // 5.5) HEARTS
@@ -749,7 +744,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         drawPointsOnIsland(canvas);
 
         // 7) HUD + Buttons
-        drawHud(canvas);
+        if (playerHud != null) {
+            playerHud.draw(canvas, player, getWidth(), getHeight());
+        }
+        drawTimer(canvas);
         drawPauseButton(canvas);
         drawFireButton(canvas);
 
@@ -768,27 +766,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             canvas.drawText("PAUSE", centerX, centerY, t);
         }
 
-        // === NEW: luôn vẽ 2 nút Audio SAU CÙNG để không bị phủ che ===
+        // 8) Audio toggles (vẽ sau cùng)
         drawAudioToggles(canvas);
     }
 
-    private void drawPointsOnIsland(Canvas canvas) {
-        paint.setColor(Color.parseColor("#66FFFF"));
-        for (int i = 0; i < points.size(); i++) {
-            Point p = points.get(i);
-            float sx = (p.x + islandX) - cameraX;
-            float sy = (p.y + islandY) - cameraY;
-            canvas.drawCircle(sx, sy, 10f, paint);
-        }
-    }
-
-    private void drawHud(Canvas canvas) {
-        int w = (int) (getWidth() * 0.3f);
-        drawBar(canvas, 10, 10,  w, 24, player.getMana(),  player.getMaxMana(), 0xFF1E88E5, "Mana");
-        drawBar(canvas, 10, 44,  w, 24, player.getHp(),    player.getMaxHp(),   0xFFE53935, "HP");
-        drawBar(canvas, 10, 78,  w, 24, player.getEnergy(), player.getMaxEnergy(), 0xFFFFFF99, "Energy");
-
-        // TIMER
+    private void drawTimer(Canvas canvas) {
         long now = System.currentTimeMillis();
         long elapsedMs = timerPaused
                 ? (pauseStartMs - timerStartMs - pausedAccumulatedMs)
@@ -816,15 +798,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         canvas.drawText(timeText, cx, baselineY, timePaint);
     }
 
-    private void drawBar(Canvas c, int x, int y, int w, int h, int value, int max, int color, String label) {
-        Paint bg = new Paint(); bg.setColor(0xFF333333);
-        c.drawRect(x, y, x+w, y+h, bg);
-        float ratio = Math.max(0f, Math.min(1f, max == 0 ? 0f : (value / (float) max)));
-        Paint fill = new Paint(); fill.setColor(color);
-        c.drawRect(x, y, x + (int)(w * ratio), y + h, fill);
-        Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        text.setColor(Color.WHITE); text.setTextSize(18f);
-        c.drawText(label + ": " + value + "/" + max, x, y + h + 20, text);
+    private void drawPointsOnIsland(Canvas canvas) {
+        paint.setColor(Color.parseColor("#66FFFF"));
+        for (int i = 0; i < points.size(); i++) {
+            Point p = points.get(i);
+            float sx = (p.x + islandX) - cameraX;
+            float sy = (p.y + islandY) - cameraY;
+            canvas.drawCircle(sx, sy, 10f, paint);
+        }
     }
 
     // ===== Buttons layout =====
@@ -845,29 +826,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         pauseBtnRect = new Rect(pauseLeft, pauseTop, pauseLeft + pauseSize, pauseTop + pauseSize);
         pauseBtnRadiusPx = pauseSize / 2f;
 
-        // ===== NEW: Music/Sound bottom-center (HORIZONTAL) =====
+        // Music/Sound bottom-center (horizontal)
         int audioSize = (int) dp(56);
         int spacing   = (int) dp(12);
 
-        int totalW = audioSize * 2 + spacing;   // tổng bề rộng 2 nút + khoảng cách
-        int leftX  = (w - totalW) / 2;          // canh giữa theo ngang
-        int topY   = h - margin - audioSize;    // cùng một hàng sát đáy, dùng margin đã có ở trên
+        int totalW = audioSize * 2 + spacing;
+        int leftX  = (w - totalW) / 2;
+        int topY   = h - margin - audioSize;
 
-// Music bên trái
-        musicBtnRect = new Rect(
-                leftX,
-                topY,
-                leftX + audioSize,
-                topY + audioSize
-        );
-
-// Sound bên phải
-        soundBtnRect = new Rect(
-                leftX + audioSize + spacing,
-                topY,
-                leftX + audioSize + spacing + audioSize,
-                topY + audioSize
-        );
+        musicBtnRect = new Rect(leftX, topY, leftX + audioSize, topY + audioSize);
+        soundBtnRect = new Rect(leftX + audioSize + spacing, topY,
+                leftX + audioSize + spacing + audioSize, topY + audioSize);
     }
 
     // ===== Fire button (UI) =====
@@ -935,9 +904,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     private void tryShootAtNearestEnemy() {
-        long now = System.currentTimeMillis();
-        if (now < nextShootAtMs) return;
-        if (player == null) return;
+        if (player == null || playerMgr == null) return;
 
         float px = player.centerX();
         float py = player.centerY();
@@ -945,7 +912,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // Tìm mục tiêu gần nhất: trong enemies + boss
         float bestD2 = Float.MAX_VALUE;
         float tx = Float.NaN, ty = Float.NaN;
-        boolean targetIsBoss = false;
 
         // 1) enemies
         if (enemyMgr != null) {
@@ -956,7 +922,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 float dx = ex - px, dy = ey - py;
                 float d2 = dx*dx + dy*dy;
                 if (d2 < bestD2) {
-                    bestD2 = d2; tx = ex; ty = ey; targetIsBoss = false;
+                    bestD2 = d2; tx = ex; ty = ey;
                 }
             }
         }
@@ -970,25 +936,25 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 float dx = bx - px, dy = by - py;
                 float d2 = dx*dx + dy*dy;
                 if (d2 < bestD2) {
-                    bestD2 = d2; tx = bx; ty = by; targetIsBoss = true;
+                    bestD2 = d2; tx = bx; ty = by;
                 }
             }
         }
 
         if (!Float.isNaN(tx)) {
-            Bullet b = player.spawnBulletToward(
-                    tx, ty,
-                    mapWidth, mapHeight,
-                    getContext()
-            );
-            bullets.add(b);
-            nextShootAtMs = now + SHOOT_COOLDOWN_MS;
-            playFireSfx();
+            // NEW: xin skill từ PlayerManager (tự check cooldown + trừ energy/mana)
+            Fireball fb = playerMgr.tryUseSkill(SkillType.FIREBALL, tx, ty);
+            if (fb != null) {
+                fireballs.add(fb);
+                playFireSfx();
+            } else {
+                // Không bắn được: cooldown/thiếu tài nguyên
+                // long cd = playerMgr.getRemainingCooldownMs(SkillType.FIREBALL);
+            }
         }
     }
 
-
-    // ===== SFX (đã tôn trọng soundEnabled) =====
+    // ===== SFX =====
     private void playFireSfx() {
         if (paused) return;
         if (!soundEnabled) return;
@@ -1023,21 +989,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private void drawEntityBounds(Canvas c) {
         if (!showDebugBounds || player == null || enemyMgr == null) return;
 
-        // offset màn hình (giống cách bạn vẽ entity: player.draw(canvas, cameraX - islandX, cameraY - islandY))
         float offX = cameraX - islandX;
         float offY = cameraY - islandY;
 
-        // ---- Player ----
+        // Player
         float pl = player.x - offX;
         float pt = player.y - offY;
         float pr = pl + player.w;
         float pb = pt + player.h;
         c.drawRect(pl, pt, pr, pb, debugPaintPlayer);
 
-        // chấm tâm (tuỳ chọn)
-        // c.drawCircle(pl + player.w/2f, pt + player.h/2f, dp(2), debugPaintPlayer);
-
-        // ---- Enemies ----
+        // Enemies
         for (Enemy en : enemyMgr.list()) {
             try { if (en.getState() == Enemy.State.DIE) continue; } catch (Throwable ignore) {}
             float el = en.x - offX;
@@ -1045,7 +1007,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             float er = el + en.w;
             float eb = et + en.h;
             c.drawRect(el, et, er, eb, debugPaintEnemy);
-            // c.drawCircle(el + en.w/2f, et + en.h/2f, dp(2), debugPaintEnemy); // chấm tâm (tuỳ chọn)
         }
     }
 
@@ -1053,7 +1014,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         long now = System.currentTimeMillis();
         if (now - lastHeartSpawnAtMs < HEART_SPAWN_INTERVAL_MS) return;
         if (bmpHeart == null) return;
-        if (hearts.size() >= HEART_MAX_ON_MAP) { // giới hạn số lượng đang tồn tại
+        if (hearts.size() >= HEART_MAX_ON_MAP) {
             lastHeartSpawnAtMs = now;
             return;
         }
@@ -1103,7 +1064,4 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             h.draw(canvas, offX, offY);
         }
     }
-
-
-
 }

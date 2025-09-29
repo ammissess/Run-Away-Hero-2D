@@ -24,13 +24,13 @@ public class Boss extends GameObject {
     private final Context ctx;
 
     // ===== Stats cơ bản của Boss =====
-    public static final int BASE_HP     = 600;
-    public static final int BASE_SPEED  = 1;
+    public static final int BASE_HP     = 400;
+    public static final int BASE_SPEED  = 2;
     public static final int BASE_DAMAGE = 15;
 
     // ===== Lock thời gian =====
-    private static final long ATTACK_ANIM_MS = 700L;
-    private static final long DIE_ANIM_MS    = 1200L;
+    private static final long ATTACK_ANIM_MS = 1000L;
+    private static final long DIE_ANIM_MS    = 1000L;
 
     private long animLockUntilMs = 0L;  // lock cho ATTACK
     private long dieEndAtMs      = 0L;  // để biết khi nào DIE xong
@@ -240,5 +240,11 @@ public class Boss extends GameObject {
         Bitmap[] frames = SpriteAnim.loadFrames(ctx, ids);
         for (int i = 0; i < frames.length; i++) frames[i] = trimTransparent(frames[i]);
         return frames;
+    }
+
+    public void forceIdle() {
+        try {
+            setState(State.IDLE);
+        } catch (Exception ignore) {}
     }
 }

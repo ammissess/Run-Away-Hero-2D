@@ -1,4 +1,4 @@
-package com.example.game2dfighting.game.projectile;
+package com.example.game2dfighting.game.skill;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -10,7 +10,7 @@ import android.graphics.RectF;
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.entity.Enemy;
 
-public class Bullet {
+public class Fireball {
     public float x, y;          // tâm viên đạn (MAP)
     public float vx, vy;        // vận tốc (px/s)
     public float radius = 18f;  // bán kính va chạm ~ 1/2 cạnh sprite đã scale
@@ -27,7 +27,7 @@ public class Bullet {
     // ma trận xoay theo hướng bay
     private final Matrix matrix = new Matrix();
 
-    public Bullet(float cx, float cy, float vx, float vy, int mapW, int mapH, Context ctx){
+    public Fireball(float cx, float cy, float vx, float vy, int mapW, int mapH, Context ctx){
         this.x = cx; this.y = cy;
         this.vx = vx; this.vy = vy;
         this.mapW = mapW; this.mapH = mapH;

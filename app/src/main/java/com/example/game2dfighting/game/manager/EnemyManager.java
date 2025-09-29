@@ -57,7 +57,7 @@ public class EnemyManager {
     private final Paint hpPaint   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint hpBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint sharedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
+    private final Paint hpOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     // Trạng thái combat
     private final Map<Enemy, Long>    nextEnemyAttackAtMs = new HashMap<>();
     private final Map<Enemy, Integer> enemyHp             = new HashMap<>();
@@ -77,8 +77,16 @@ public class EnemyManager {
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
         this.ctx = ctx; this.mapW = mapW; this.mapH = mapH;
-        hpPaint.setColor(0xFFFF0000); hpPaint.setStyle(Paint.Style.FILL);
-        hpBgPaint.setColor(0xFF555555); hpBgPaint.setStyle(Paint.Style.FILL);
+        hpPaint.setColor(0xFFFF0000);    // đỏ
+        hpPaint.setStyle(Paint.Style.FILL);
+
+        hpBgPaint.setColor(0xFF555555);  // nền tối
+        hpBgPaint.setStyle(Paint.Style.FILL);
+
+        hpOutlinePaint.setStyle(Paint.Style.STROKE);
+        hpOutlinePaint.setStrokeWidth(2f);
+        hpOutlinePaint.setColor(0xFF00FF00); // xanh lá cây
+
     }
     public EnemyManager(int mapW, int mapH) { this(null, mapW, mapH); }
 
@@ -351,11 +359,19 @@ public class EnemyManager {
         final int hp = enemyHp.getOrDefault(e, maxHp);
         final float ratio = Math.max(0f, Math.min(1f, (float) hp / maxHp));
 
-        final float barW = e.w, barH = 10f, gapY = 20f;
+        // Kích thước & vị trí thanh máu
+        final float barW = e.w; // rộng bề ngang quái
+        final float barH = 10f;                        // cao
+        final float gapY = 20f;                       // cách đỉnh đầu quái
         final float screenX = e.x - cameraX, screenY = e.y - cameraY;
         final float barX = screenX + (e.w - barW) / 2f, barY = screenY - gapY - barH;
 
+        // Nền
         c.drawRect(barX, barY, barX + barW, barY + barH, hpBgPaint);
+        // Phần máu đỏ
         c.drawRect(barX, barY, barX + barW * ratio, barY + barH, hpPaint);
+        // Viền xanh lá cây
+        c.drawRect(barX, barY, barX + barW, barY + barH, hpOutlinePaint);
     }
+
 }

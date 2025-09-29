@@ -6,7 +6,7 @@ import android.graphics.Bitmap;
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.core.SpriteAnim;
-import com.example.game2dfighting.game.projectile.Bullet;
+import com.example.game2dfighting.game.skill.Fireball;
 
 /**
  * Player: vẫn di chuyển khi đang ATTACK hoặc HURT.
@@ -187,17 +187,41 @@ public class Player extends GameObject {
         // KHÔNG khóa di chuyển
     }
 
-    public Bullet spawnBulletToward(float targetX, float targetY, int mapW, int mapH, Context ctx){
+//    public Fireball spawnBulletToward(float targetX, float targetY, int mapW, int mapH, Context ctx){
+//        float px = this.x + this.w/2f;
+//        float py = this.y + this.h/2f;
+//
+//        float dx = targetX - px;
+//        float dy = targetY - py;
+//        float len = (float)Math.sqrt(dx*dx + dy*dy);
+//        if (len < 1f) len = 1f;
+//        dx /= len; dy /= len;
+//
+//        float speed = 300f; // px/s
+//        float vx = dx * speed;
+//        float vy = dy * speed;
+//
+//        float muzzle = Math.min(this.w, this.h) * 0.4f;
+//        float sx = px + dx * muzzle;
+//        float sy = py + dy * muzzle;
+//
+//        return new Fireball(sx, sy, vx, vy, mapW, mapH, ctx);
+//    }
+
+    public Fireball shootFireballToward(float targetX, float targetY, int mapW, int mapH, Context ctx){
+        // Tâm người chơi
         float px = this.x + this.w/2f;
         float py = this.y + this.h/2f;
 
+        // Hướng bay (chuẩn hoá)
         float dx = targetX - px;
         float dy = targetY - py;
         float len = (float)Math.sqrt(dx*dx + dy*dy);
         if (len < 1f) len = 1f;
         dx /= len; dy /= len;
 
-        float speed = 300f; // px/s
+        // Tốc độ & vị trí nòng súng
+        float speed = 300f; // px/s — tuỳ bạn
         float vx = dx * speed;
         float vy = dy * speed;
 
@@ -205,10 +229,10 @@ public class Player extends GameObject {
         float sx = px + dx * muzzle;
         float sy = py + dy * muzzle;
 
-        return new Bullet(sx, sy, vx, vy, mapW, mapH, ctx);
+        // GỌI THEO ĐÚNG THỨ TỰ CONSTRUCTOR:
+        // Fireball(float sx, float sy, float vx, float vy, int mapW, int mapH, Context ctx)
+        return new Fireball(sx, sy, vx, vy, mapW, mapH, ctx);
     }
-
-
 
     /**
      * Player nhận sát thương. Trả về true nếu chết (để GameView xử lý).
@@ -320,5 +344,7 @@ public class Player extends GameObject {
         }
         return frames;
     }
+
+
 
 }
