@@ -14,7 +14,8 @@
         <!-- MainActivity: Launcher -->
         <activity
             android:name=".view.MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -24,16 +25,19 @@
         <!-- HomeActivity: Trang chủ -->
         <activity
             android:name=".view.HomeActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
         <!-- Level1Activity: Level 1 -->
         <activity
             android:name=".view.Level1Activity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
         <activity
             android:name=".view.GameOverActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="landscape" />
 
     </application>
 

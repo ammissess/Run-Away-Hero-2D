@@ -6,9 +6,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.Button;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
@@ -18,57 +18,48 @@ import com.example.game2dfighting.ui.JoystickView;
 import com.example.game2dfighting.view.map.GameView;
 
 public class Level1Activity extends AppCompatActivity {
+
     private GameView gameView;
     private JoystickView joystickView;
 
     private View pauseOverlay;
     private ImageButton btnPause;
-    private Button btnResume, btnQuit;
+    private Button btnResume, btnQuit, btnHome;
 
-    // ===== Music =====
     private MediaPlayer bgMusic;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Fullscreen + immersive
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        // Fullscreen immersive
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        );
 
         setContentView(R.layout.activity_level1);
-
         FrameLayout root = findViewById(R.id.level1_root);
 
-        // --- GameView ---
+        // --- GameView (thêm VÀO index 0 để ở dưới cùng) ---
         gameView = new GameView(this);
+        FrameLayout.LayoutParams gvParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        );
+        gameView.setLayoutParams(gvParams);
 
-        // Khi player chết trong GameView -> sang GameOver
+        // QUAN TRỌNG: Add vào index 0 để các view từ XML vẫn ở trên
+        root.addView(gameView, 0);
+
+        // Khi player chết -> GameOver
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
-            // dừng nhạc trước khi chuyển màn
             stopAndRewindMusic();
-            Intent i = new Intent(Level1Activity.this, GameOverActivity.class);
-            startActivity(i);
+            startActivity(new Intent(Level1Activity.this, GameOverActivity.class));
             finish();
         }));
 
-        // ===== KẾT NỐI TOGGLE ÂM NHẠC TỪ GAMEVIEW → ACTIVITY =====
-        gameView.setAudioControl(enabled -> {
-            if (bgMusic == null) return;
-            if (enabled) {
-                if (!bgMusic.isPlaying() && !gameView.isPaused()) {
-                    bgMusic.start();
-                }
-            } else {
-                if (bgMusic.isPlaying()) bgMusic.pause();
-            }
-        });
-
-        // --- Joystick ---
+        // --- Joystick (thêm SAU GameView để ở trên) ---
         joystickView = new JoystickView(this, (x, y) -> {
             if (!gameView.isPaused()) {
                 gameView.setMovingUp(y < -0.2f);
@@ -82,24 +73,23 @@ public class Level1Activity extends AppCompatActivity {
                 gameView.setMovingRight(false);
             }
         });
-
-        // Đặt joystick góc dưới trái
         FrameLayout.LayoutParams jsParams = new FrameLayout.LayoutParams(400, 400);
         jsParams.leftMargin = 50;
         jsParams.topMargin = getResources().getDisplayMetrics().heightPixels - 500;
         joystickView.setLayoutParams(jsParams);
-
-        // Thêm view game + joystick vào layout (GameView nằm dưới cùng)
-        root.addView(gameView);
         root.addView(joystickView);
 
-        // --- Overlay Pause ---
+        // --- Lấy references từ XML (đã có sẵn trong layout) ---
         pauseOverlay = findViewById(R.id.pause_overlay);
         btnPause = findViewById(R.id.btn_pause);
         btnResume = findViewById(R.id.btn_resume);
         btnQuit = findViewById(R.id.btn_quit);
+        btnHome = findViewById(R.id.btn_home);
 
-        // Pause -> hiện overlay (Resume/Quit)
+        // Đảm bảo overlay ẩn ban đầu
+        pauseOverlay.setVisibility(View.GONE);
+
+        // --- Setup listeners ---
         btnPause.setOnClickListener(v -> {
             if (!gameView.isPaused()) {
                 gameView.setPaused(true);
@@ -108,67 +98,66 @@ public class Level1Activity extends AppCompatActivity {
             }
         });
 
-        // Resume -> ẩn overlay
         btnResume.setOnClickListener(v -> {
             pauseOverlay.setVisibility(View.GONE);
             gameView.setPaused(false);
-            // chỉ phát lại nếu người chơi chưa tắt Music
-            if (bgMusic != null && gameView.isMusicEnabled() && !bgMusic.isPlaying()) {
+            if (bgMusic != null && !bgMusic.isPlaying() && gameView.isMusicEnabled()) {
                 bgMusic.start();
                 fadeIn(bgMusic, 400);
             }
         });
 
-        // Quit -> về Home
         btnQuit.setOnClickListener(v -> {
             stopAndRewindMusic();
-            Intent i = new Intent(Level1Activity.this, HomeActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(i);
+            startActivity(new Intent(Level1Activity.this, HomeActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
             finish();
         });
 
-        // Back gesture: đang chơi -> pause; đang pause -> thoát về Home
+        btnHome.setOnClickListener(v -> {
+            stopAndRewindMusic();
+            startActivity(new Intent(Level1Activity.this, HomeActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            finish();
+        });
+
+        // --- Back gesture ---
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() {
+            @Override
+            public void handleOnBackPressed() {
                 if (!gameView.isPaused()) {
                     gameView.setPaused(true);
                     pauseOverlay.setVisibility(View.VISIBLE);
                     if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
                 } else {
                     stopAndRewindMusic();
-                    Intent i = new Intent(Level1Activity.this, HomeActivity.class);
-                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                    startActivity(i);
+                    startActivity(new Intent(Level1Activity.this, HomeActivity.class)
+                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
                     finish();
                 }
             }
         });
 
-        // ===== Init music but DON'T start here =====
+        // --- Init music ---
         bgMusic = MediaPlayer.create(this, R.raw.bg_game_level1);
         bgMusic.setLooping(true);
-        bgMusic.setVolume(0f, 0f); // sẽ fade-in trong onResume()
+        bgMusic.setVolume(0f, 0f);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // Nếu không paus e và người chơi bật Music -> phát
-        if (!gameView.isPaused()) {
-            if (bgMusic != null && gameView.isMusicEnabled() && !bgMusic.isPlaying()) {
-                bgMusic.start();
-                fadeIn(bgMusic, 600);
-            }
+        if (!gameView.isPaused() && bgMusic != null && !bgMusic.isPlaying() && gameView.isMusicEnabled()) {
+            bgMusic.start();
+            fadeIn(bgMusic, 600);
         }
     }
 
     @Override
     protected void onPause() {
-        // Đi background thì tự pause + mở overlay
         if (!gameView.isPaused()) {
             gameView.setPaused(true);
-            if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
+            pauseOverlay.setVisibility(View.VISIBLE);
         }
         if (bgMusic != null && bgMusic.isPlaying()) {
             bgMusic.pause();
@@ -185,49 +174,23 @@ public class Level1Activity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    /* ================== Helpers ================== */
-
     private void stopAndRewindMusic() {
-        if (bgMusic != null && bgMusic.isPlaying()) {
-            bgMusic.pause();
-        }
+        if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
         if (bgMusic != null) bgMusic.seekTo(0);
     }
 
-    // Fade-in volume đơn giản
     private void fadeIn(MediaPlayer mp, int durationMs) {
         if (mp == null) return;
         final int steps = 20;
         final float delta = 1.0f / steps;
         final int stepDelay = Math.max(10, durationMs / steps);
-
         mp.setVolume(0f, 0f);
         Handler h = new Handler();
         for (int i = 1; i <= steps; i++) {
-            final float vol = delta * i; // 0 -> 1
+            final float vol = delta * i;
             h.postDelayed(() -> {
                 if (mp != null && mp.isPlaying()) mp.setVolume(vol, vol);
             }, (long) i * stepDelay);
         }
-    }
-
-    @SuppressWarnings("unused")
-    private void fadeOut(MediaPlayer mp, int durationMs) {
-        if (mp == null) return;
-        final int steps = 20;
-        final float delta = 1.0f / steps;
-        final int stepDelay = Math.max(10, durationMs / steps);
-
-        Handler h = new Handler();
-        for (int i = 1; i <= steps; i++) {
-            final float vol = 1.0f - delta * i; // 1 -> 0
-            h.postDelayed(() -> {
-                if (mp != null) mp.setVolume(Math.max(0f, vol), Math.max(0f, vol));
-            }, (long) i * stepDelay);
-        }
-        h.postDelayed(() -> {
-            if (mp != null && mp.isPlaying()) mp.pause();
-            if (mp != null) mp.setVolume(1f, 1f);
-        }, (long) (steps + 1) * stepDelay);
     }
 }

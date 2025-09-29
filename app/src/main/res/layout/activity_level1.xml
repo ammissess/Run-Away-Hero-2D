@@ -13,6 +13,7 @@
         android:layout_margin="12dp"
         android:background="@android:color/transparent"
         android:src="@drawable/ic_pause"
+
         android:contentDescription="@string/pause"/>
 
     <!-- Overlay khi pause: mờ + 2 nút -->
@@ -37,6 +38,19 @@
             android:layout_width="200dp"
             android:layout_height="56dp"
             android:layout_marginTop="12dp"
+            android:backgroundTint="#D32F2F"
             android:text="Quit"/>
+
+        <Button
+            android:id="@+id/btn_home"
+            android:layout_width="200dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Home"
+            android:visibility="gone"
+            android:backgroundTint="#D32F2F"
+            android:textColor="@android:color/white"/>
+
     </LinearLayout>
+
 </FrameLayout>

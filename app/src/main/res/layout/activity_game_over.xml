@@ -80,7 +80,8 @@
             android:layout_height="wrap_content"
             android:text="Game Over"
             android:textSize="56sp"
-            android:textColor="#993399"
+            android:textColor="#FFCC33"
+            android:textStyle="bold"
             android:layout_marginBottom="40dp"/>
 
         <Button

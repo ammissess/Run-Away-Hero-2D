@@ -5,6 +5,9 @@ import android.content.Context;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
+import com.example.game2dfighting.game.skill.Shield;
+import com.example.game2dfighting.game.skill.ShieldBomb;
+
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -130,8 +133,12 @@ public class PlayerManager {
         return (IceSpike) tryUseSkill(SkillType.ICESPIKE, tx, ty);
     }
 
-    public void tryUseShield() {
+    /*public void tryUseShield() {
         tryUseSkill(SkillType.SHIELD, 0, 0);
+    }
+*/
+    public void tryUseShield() {
+        tryUseShield(null, null); // gọi version mới
     }
 
     public long getRemainingCooldownMs(SkillType type) {
@@ -142,4 +149,40 @@ public class PlayerManager {
 
     public void setEnergyRegenPerSec(int v){ energyRegenPerSec = Math.max(0, v); }
     public void setManaRegenPerSec(int v){ manaRegenPerSec = Math.max(0, v); }
+
+
+    // Version mới nhận EnemyManager và BossManager
+    public void tryUseShield(EnemyManager enemyMgr, BossManager bossMgr) {
+        if (player == null) return;
+
+        SkillConfig cfg = configs.get(SkillType.SHIELD);
+        if (cfg == null) return;
+
+        long now = System.currentTimeMillis();
+        long ra = readyAt.getOrDefault(SkillType.SHIELD, 0L);
+        if (now < ra) return;
+
+        if (player.getEnergy() < cfg.energyCost || player.getMana() < cfg.manaCost) {
+            return;
+        }
+
+        player.setEnergy(player.getEnergy() - cfg.energyCost);
+        player.setMana(player.getMana() - cfg.manaCost);
+        readyAt.put(SkillType.SHIELD, now + cfg.cooldownMs);
+
+        // Kiểm tra loại shield hiện tại
+        Shield currentShield = player.getShield();
+
+        if (currentShield instanceof ShieldBomb && currentShield.isActive()) {
+            // Nếu đang có ShieldBomb active -> kích nổ
+            ShieldBomb bomb = (ShieldBomb) currentShield;
+            bomb.triggerExplosion(enemyMgr, bossMgr);
+        } else if (currentShield != null && currentShield.isActive()) {
+            // Nếu có shield thường active -> không làm gì (hoặc reset thời gian)
+            // Có thể thêm logic extend shield duration ở đây
+        } else {
+            // Không có shield -> tạo shield thường
+            player.addShield(50, 5000, Player.ShieldType.NORMAL);
+        }
+    }
 }

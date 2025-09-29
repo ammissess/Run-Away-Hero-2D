@@ -10,6 +10,7 @@ import com.example.game2dfighting.game.core.SpriteAnim;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
 import com.example.game2dfighting.game.skill.Shield;
+import com.example.game2dfighting.game.skill.ShieldBomb;
 
 /**
  * Player: vẫn di chuyển khi đang ATTACK hoặc HURT.
@@ -19,6 +20,10 @@ public class Player extends GameObject {
 
     // ==== Input flags (GameView sẽ set mỗi frame) ====
     public boolean up, down, left, right;
+
+    // Trong class Player, thêm enum và field:
+    public enum ShieldType { NORMAL, BOMB }
+    private ShieldType currentShieldType = ShieldType.NORMAL;
 
     // ==== Core ====
     private final Context ctx;
@@ -345,12 +350,27 @@ public class Player extends GameObject {
         return frames;
     }
 
+    // Sửa lại method addShield:
+    public void addShield(int hp, long durationMs, ShieldType type) {
+        this.currentShieldType = type;
+        if (type == ShieldType.BOMB) {
+            this.shield = new ShieldBomb(this, hp, durationMs);
+        } else {
+            this.shield = new Shield(this, hp, durationMs);
+        }
+    }
+
+    // Overload cho backward compatibility
     public void addShield(int hp, long durationMs) {
-        this.shield = new Shield(this, hp, durationMs);
+        addShield(hp, durationMs, ShieldType.NORMAL);
     }
 
     public Shield getShield() {
         return shield;
+    }
+
+    public ShieldType getCurrentShieldType() {
+        return currentShieldType;
     }
 
     @Override

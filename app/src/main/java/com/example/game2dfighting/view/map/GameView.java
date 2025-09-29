@@ -671,12 +671,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     invalidate();
                     return true;
                 }
-
+/* xóa pause đi không xung đột với layout
                 // Pause (trên-phải)
                 if (isInPauseButton(tx, ty)) {
                     setPaused(!isPaused());
                     return true;
                 }
+                */
+
                 // Fire (dưới-phải)
                 if (isInFireButton(tx, ty)) {
                     tryShootAtNearestEnemy();
@@ -687,9 +689,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     tryShootIceAtNearestEnemy();
                     return true;
                 }
-                // Shield
+                // Trong onTouchEvent, khi bấm nút Shield:
                 if (playerHud != null && playerHud.isInShieldButton(tx, ty)) {
-                    playerMgr.tryUseShield();
+                    // Truyền thêm managers vào
+                    if (playerMgr != null) {
+                        playerMgr.tryUseShield(enemyMgr, bossMgr);
+                    }
                     return true;
                 }
 
@@ -840,8 +845,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             playerHud.drawShieldButton(canvas);
         }
         drawTimer(canvas);
-        drawPauseButton(canvas);
+       // drawPauseButton(canvas);
 
+ /* xoa overlay pause
         // Overlay pause
         if (paused) {
             Paint dim = new Paint();
@@ -856,6 +862,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             float centerY = getHeight() / 2f;
             canvas.drawText("PAUSE", centerX, centerY, t);
         }
+        */
+
 
         // 8) Audio toggles (vẽ sau cùng)
         drawAudioToggles(canvas);
@@ -913,14 +921,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             );
         }
 
-
+/* xoa pause render
         // Pause top-right
         int pauseSize = (int) (64 * getResources().getDisplayMetrics().density);
         int pauseLeft = w - margin - pauseSize;
         int pauseTop  = margin;
         pauseBtnRect = new Rect(pauseLeft, pauseTop, pauseLeft + pauseSize, pauseTop + pauseSize);
         pauseBtnRadiusPx = pauseSize / 2f;
-
+*/
         // Music/Sound bottom-center (horizontal)
         int audioSize = (int) dp(56);
         int spacing   = (int) dp(12);
@@ -954,7 +962,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     }
 
     // ===== Pause button (UI) =====
-    private void drawPauseButton(Canvas c) {
+ /*   private void drawPauseButton(Canvas c) {
         if (pauseBtnRect == null) return;
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -972,6 +980,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         c.drawLine(cx - barW, cy - barH/2f, cx - barW, cy + barH/2f, p);
         c.drawLine(cx + barW, cy - barH/2f, cx + barW, cy + barH/2f, p);
     }
+    */
 
     private boolean isInFireButton(float x, float y) {
         return playerHud != null && playerHud.isInFireButton(x, y);
@@ -1208,6 +1217,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         lastShieldHeartSpawnAtMs = now;
     }
 
+    // Trong method updateShieldHeartsAndPickup():
     private void updateShieldHeartsAndPickup() {
         if (player == null) return;
         Rect pRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
@@ -1217,11 +1227,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             if (h.isConsumed()) { shieldHearts.remove(i); continue; }
 
             if (Rect.intersects(pRect, h.getHitbox())) {
-                // Ăn item → bật shield dùng CHUNG cơ chế skill
-                player.addShield(SHIELD_HEART_AMOUNT, SHIELD_HEART_DURATION_MS);
+                // Ăn item → bật ShieldBomb thay vì Shield thường
+                player.addShield(SHIELD_HEART_AMOUNT, SHIELD_HEART_DURATION_MS,
+                        Player.ShieldType.BOMB);
                 h.consume();
                 shieldHearts.remove(i);
-                playPickupSfx(); // dùng cùng SFX nhặt đồ
+                playPickupSfx();
             }
         }
     }
