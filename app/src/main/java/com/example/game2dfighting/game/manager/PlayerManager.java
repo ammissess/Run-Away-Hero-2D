@@ -12,7 +12,8 @@ public class PlayerManager {
 
     public enum SkillType {
         FIREBALL, // cầu lửa
-        ICESPIKE  // mũi băng
+        ICESPIKE,  // mũi băng
+        SHIELD   // khiên
     }
 
     public static class SkillConfig {
@@ -58,6 +59,13 @@ public class PlayerManager {
                 4,      // tốn 4 energy
                 0       // không tốn mana
         ));
+
+        configs.put(SkillType.SHIELD, new SkillConfig(
+                2000L,  // cooldown 2 giây
+                10,      // không tốn energy
+                0      // tốn mana
+        ));
+
 
         long now = System.currentTimeMillis();
         for (SkillType t : SkillType.values()) {
@@ -106,6 +114,9 @@ public class PlayerManager {
                 return player.shootFireballToward(targetWorldX, targetWorldY, mapW, mapH, ctx);
             case ICESPIKE:
                 return player.shootIceSpikeToward(targetWorldX, targetWorldY, mapW, mapH, ctx);
+            case SHIELD:
+                player.addShield(50, 5000); // 50 shieldHP, tồn tại 5 giây
+                return null;
         }
         return null;
     }
@@ -117,6 +128,10 @@ public class PlayerManager {
 
     public IceSpike tryUseIceSpike(float tx, float ty) {
         return (IceSpike) tryUseSkill(SkillType.ICESPIKE, tx, ty);
+    }
+
+    public void tryUseShield() {
+        tryUseSkill(SkillType.SHIELD, 0, 0);
     }
 
     public long getRemainingCooldownMs(SkillType type) {

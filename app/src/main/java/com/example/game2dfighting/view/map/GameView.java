@@ -29,6 +29,8 @@ import com.example.game2dfighting.game.manager.PlayerManager.SkillType;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
 import com.example.game2dfighting.ui.PlayerHudRenderer;
+import com.example.game2dfighting.game.entity.ShieldHeart;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -75,6 +77,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Bitmap bmpSky, bmpIsland, bmpCloud;
     private int skyW, skyH;
     private int islandX, islandY;
+
+    // ================== SHIELD HEARTS (pickup bật giáp) ==================
+    private Bitmap bmpShieldHeart;
+    private final List<ShieldHeart> shieldHearts = new ArrayList<>();
+    private long lastShieldHeartSpawnAtMs = 0L;
+    private static final long SHIELD_HEART_SPAWN_INTERVAL_MS = 7000L; // mỗi 7s
+    private static final int  SHIELD_HEART_MAX_ON_MAP         = 2;    // tối đa 2 cái
+    private static final int  SHIELD_HEART_AMOUNT             = 50;   // +50 giáp
+    private static final int  SHIELD_HEART_DURATION_MS        = 5000; // 5 giây
 
     // Clouds ...
     private final ArrayList<Cloud> clouds = new ArrayList<>();
@@ -305,6 +316,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         int heartH = Math.round(dp(20));
         bmpHeart = Bitmap.createScaledBitmap(heartSrc, heartW, heartH, true);
         lastHeartSpawnAtMs = System.currentTimeMillis();
+
+        // SHIELD HEART BITMAP (dùng tạm heart nếu chưa có icon riêng)
+        Bitmap shieldSrc = BitmapFactory.decodeResource(getResources(), R.drawable.shield_item);
+        int shW = Math.round(dp(20));
+        int shH = Math.round(dp(20));
+        bmpShieldHeart = Bitmap.createScaledBitmap(shieldSrc, shW, shH, true);
+        lastShieldHeartSpawnAtMs = System.currentTimeMillis();
 
         // CLOUDS ...
         bmpCloud = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_clouds);
@@ -540,6 +558,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 maybeSpawnHeart();
                 updateHeartsAndPickup();
 
+                // === SHIELD HEARTS ===
+                maybeSpawnShieldHeart();
+                updateShieldHeartsAndPickup();
+
+
                 if (player.getHp() <= 0) {
                     gameOver = true;
                     timerPaused = true;
@@ -664,6 +687,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     tryShootIceAtNearestEnemy();
                     return true;
                 }
+                // Shield
+                if (playerHud != null && playerHud.isInShieldButton(tx, ty)) {
+                    playerMgr.tryUseShield();
+                    return true;
+                }
+
 
                 break;
             }
@@ -788,12 +817,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         for (IceSpike s : icespikes) {
             s.draw(canvas, cameraX - islandX, cameraY - islandY);
         }
+        // 5c) SHIELDs
+        if (playerHud != null) {
+            playerHud.drawShieldButton(canvas); // NEW: vẽ nút Shield
+        }
 
         // Debug
         drawEntityBounds(canvas);
 
         // 5.5) HEARTS
         drawHearts(canvas);
+        drawShieldHearts(canvas);
 
         // 6) POINTS
         drawPointsOnIsland(canvas);
@@ -803,6 +837,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             playerHud.draw(canvas, player, getWidth(), getHeight()); // nếu bạn đã có hàm draw tổng
             playerHud.drawFireButton(canvas); // NEW: vẽ nút bắn bằng PNG
             playerHud.drawIceButton(canvas);
+            playerHud.drawShieldButton(canvas);
         }
         drawTimer(canvas);
         drawPauseButton(canvas);
@@ -868,28 +903,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private void setupButtons(int w, int h) {
         int margin = (int) (16 * getResources().getDisplayMetrics().density);
 
-        // Fire bottom-right
-        int fireSize = (int) (80 * getResources().getDisplayMetrics().density);
-        int fireLeft = w - margin - fireSize;
-        int fireTop  = h - margin - fireSize;
-        fireBtnRect = new Rect(fireLeft, fireTop, fireLeft + fireSize, fireTop + fireSize);
-        fireBtnRadiusPx = fireSize / 2f;
-
-        // Ice button: bên trái Fire
-        int gap = (int) (12 * getResources().getDisplayMetrics().density);
-        int iceLeft = fireLeft - gap - fireSize;
-        int iceTop  = fireTop;
-        iceBtnRect = new Rect(iceLeft, iceTop, iceLeft + fireSize, iceTop + fireSize);
-        iceBtnRadiusPx = fireBtnRadiusPx;
-
-        // Sync HUD
+        // Layout 3 nút kỹ năng qua HUD (góc dưới-phải)
         if (playerHud != null) {
-            playerHud.setFireButtonBounds(fireBtnRect, fireBtnRadiusPx);
-            playerHud.setFireballButtonImage(R.drawable.fireball_button, fireBtnRect.width());
-
-            playerHud.setIceButtonBounds(iceBtnRect, iceBtnRadiusPx);
-            playerHud.setIceButtonImage(R.drawable.icespike_button, iceBtnRect.width());
+            playerHud.layoutActionButtons(
+                    w, h,
+                    R.drawable.fireball_button,
+                    R.drawable.icespike_button,
+                    R.drawable.shield_button1
+            );
         }
+
 
         // Pause top-right
         int pauseSize = (int) (64 * getResources().getDisplayMetrics().density);
@@ -1163,6 +1186,47 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    private void maybeSpawnShieldHeart() {
+        long now = System.currentTimeMillis();
+        if (now - lastShieldHeartSpawnAtMs < SHIELD_HEART_SPAWN_INTERVAL_MS) return;
+        if (bmpShieldHeart == null) return;
+        if (shieldHearts.size() >= SHIELD_HEART_MAX_ON_MAP) {
+            lastShieldHeartSpawnAtMs = now;
+            return;
+        }
+
+        Rect pr = getPlayableRect();
+        int margin = 40;
+        int maxX = Math.max(1, pr.width()  - bmpShieldHeart.getWidth()  - margin * 2);
+        int maxY = Math.max(1, pr.height() - bmpShieldHeart.getHeight() - margin * 2);
+        if (maxX <= 0 || maxY <= 0) return;
+
+        int hx = pr.left + random.nextInt(maxX) + margin;
+        int hy = pr.top  + random.nextInt(maxY) + margin;
+
+        shieldHearts.add(new ShieldHeart(hx, hy, bmpShieldHeart));
+        lastShieldHeartSpawnAtMs = now;
+    }
+
+    private void updateShieldHeartsAndPickup() {
+        if (player == null) return;
+        Rect pRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
+
+        for (int i = shieldHearts.size() - 1; i >= 0; i--) {
+            ShieldHeart h = shieldHearts.get(i);
+            if (h.isConsumed()) { shieldHearts.remove(i); continue; }
+
+            if (Rect.intersects(pRect, h.getHitbox())) {
+                // Ăn item → bật shield dùng CHUNG cơ chế skill
+                player.addShield(SHIELD_HEART_AMOUNT, SHIELD_HEART_DURATION_MS);
+                h.consume();
+                shieldHearts.remove(i);
+                playPickupSfx(); // dùng cùng SFX nhặt đồ
+            }
+        }
+    }
+
+
     private void playPickupSfx() {
         if (paused) return;
         if (!soundEnabled) return;
@@ -1179,4 +1243,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             h.draw(canvas, offX, offY);
         }
     }
+
+    private void drawShieldHearts(Canvas canvas) {
+        if (shieldHearts.isEmpty()) return;
+        float offX = cameraX - islandX;
+        float offY = cameraY - islandY;
+        for (ShieldHeart h : shieldHearts) {
+            h.draw(canvas, offX, offY);
+        }
+    }
+
 }

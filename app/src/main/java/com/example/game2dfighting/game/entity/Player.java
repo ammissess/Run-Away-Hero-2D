@@ -2,12 +2,14 @@ package com.example.game2dfighting.game.entity;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.core.SpriteAnim;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
+import com.example.game2dfighting.game.skill.Shield;
 
 /**
  * Player: vẫn di chuyển khi đang ATTACK hoặc HURT.
@@ -45,6 +47,7 @@ public class Player extends GameObject {
 
     // (Tùy chọn) stun cứng thật sự – nếu muốn chặn di chuyển
     private long hardStunUntilMs = 0L;
+    private Shield shield;
 
     // ==== DIE ====
     private static final long DIE_ANIM_MS = 600L;
@@ -176,6 +179,8 @@ public class Player extends GameObject {
             setState(State.IDLE);
         }
 
+        if (shield != null) shield.update();
+
         super.update(dtMs);
     }
 
@@ -234,19 +239,20 @@ public class Player extends GameObject {
     public boolean takeDamage(int dmg) {
         if (isDead()) return true;
 
+        if (shield != null && shield.isActive()) {
+            dmg = shield.absorbDamage(dmg);  // Shield absorb trước
+        }
+
         hp = Math.max(0, hp - Math.max(0, dmg));
         if (hp == 0) {
             onDie();
             return true;
         } else {
-            // Bị thương: chỉ khóa anim HURT, không chặn move
             hurtUntilMs = System.currentTimeMillis() + HURT_MS;
-
-            // Nếu bạn muốn stun cứng 1 chút, mở dòng dưới:
-            // hardStunUntilMs = System.currentTimeMillis() + 120L;
             return false;
         }
     }
+
 
     private void onDie() {
         setState(State.DIE);
@@ -339,6 +345,22 @@ public class Player extends GameObject {
         return frames;
     }
 
+    public void addShield(int hp, long durationMs) {
+        this.shield = new Shield(this, hp, durationMs);
+    }
+
+    public Shield getShield() {
+        return shield;
+    }
+
+    @Override
+    public void draw(Canvas c, int cameraX, int cameraY, android.graphics.Paint p) {
+        super.draw(c, cameraX, cameraY, p);
+
+        if (shield != null) {
+            shield.draw(c, cameraX, cameraY);
+        }
+    }
 
 
 }

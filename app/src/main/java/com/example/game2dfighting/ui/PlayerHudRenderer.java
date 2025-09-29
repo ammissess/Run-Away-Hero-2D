@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.util.DisplayMetrics;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -12,6 +13,7 @@ import android.graphics.Rect;
 import androidx.annotation.DrawableRes;
 
 import com.example.game2dfighting.game.entity.Player;
+import com.example.game2dfighting.game.skill.Shield;
 import com.example.game2dfighting.R;
 
 public class PlayerHudRenderer {
@@ -33,6 +35,10 @@ public class PlayerHudRenderer {
     private Rect   iceBtnRect;
     private float  iceBtnRadiusPx;
     private Bitmap bmIceBtn;
+
+    // === Shield button (NEW) ===
+    private Bitmap shieldBtn;
+    private RectF shieldBtnRect = new RectF();
 
     public PlayerHudRenderer(Context ctx) {
         this.ctx = ctx;
@@ -69,12 +75,23 @@ public class PlayerHudRenderer {
 
         // HP
         float hpRatio = clamp01(p.getHp() / (float) p.getMaxHp());
-        drawBar(c, "HP", x, y, barW, barH, hpRatio, hp, p.getHp(), p.getMaxHp());
+
+        // NEW: hiển thị số HP gồm cả shield ở tử số
+        int displayHp = p.getHp();
+        Shield sh = p.getShield();
+        if (sh != null && sh.isActive()) {
+            displayHp = p.getHp() + sh.getShieldHP(); // ví dụ 250/200
+        }
+
+        // Giữ nguyên phần lấp đầy thanh dựa trên HP thật (không vượt quá 100%)
+        drawBar(c, "HP", x, y, barW, barH, hpRatio, hp, displayHp, p.getMaxHp());
+
 
         // EN
         y += barH + spacing;
         float enRatio = clamp01(p.getEnergy() / (float) p.getMaxEnergy());
         drawBar(c, "EN", x, y, barW, barH, enRatio, en, p.getEnergy(), p.getMaxEnergy());
+
 
         // MP
         y += barH + spacing;
@@ -143,7 +160,85 @@ public class PlayerHudRenderer {
         p.setColor(Color.BLACK);
         c.drawCircle(iceBtnRect.exactCenterX(), iceBtnRect.exactCenterY(), iceBtnRadiusPx, p);
     }
+
     public boolean isInIceButton(float x, float y) {
         return iceBtnRect != null && iceBtnRect.contains((int)x, (int)y);
     }
+    public void setShieldButtonImage(@DrawableRes int resId, int sizePx) {
+        Bitmap raw = BitmapFactory.decodeResource(ctx.getResources(), resId);
+        if (raw != null) {
+            shieldBtn = Bitmap.createScaledBitmap(raw, sizePx, sizePx, true);
+            raw.recycle();
+        }
+    }
+
+    public void setShieldButtonBounds(float left, float top, float right, float bottom) {
+        shieldBtnRect.set(left, top, right, bottom);
+    }
+
+    public boolean isInShieldButton(float x, float y) {
+        return shieldBtnRect.contains(x, y);
+    }
+
+    public void drawShieldButton(Canvas c) {
+        if (shieldBtn != null && shieldBtnRect != null) {
+            float cx = shieldBtnRect.centerX();
+            float cy = shieldBtnRect.centerY();
+            float radius = Math.min(shieldBtnRect.width(), shieldBtnRect.height()) / 2f;
+
+            // Vẽ bitmap icon khiên trong hình tròn
+            Rect dst = new Rect(
+                    (int)(cx - radius),
+                    (int)(cy - radius),
+                    (int)(cx + radius),
+                    (int)(cy + radius)
+            );
+            c.drawBitmap(shieldBtn, null, dst, null);
+
+            // Vẽ viền tròn (giống Fire/Ice)
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(6f);
+            p.setColor(Color.CYAN);
+            c.drawCircle(cx, cy, radius, p);
+        }
+    }
+
+    // --- NEW: auto layout 3 nút kỹ năng ở góc dưới-phải ---
+    public void layoutActionButtons(int screenW, int screenH,
+                                    @DrawableRes int fireRes,
+                                    @DrawableRes int iceRes,
+                                    @DrawableRes int shieldRes) {
+        int margin = dpI(16);
+        int size   = dpI(80);
+        int gap    = dpI(12);
+
+        // Fire: dưới-phải
+        int fireLeft = screenW - margin - size;
+        int fireTop  = screenH - margin - size;
+        Rect fire = new Rect(fireLeft, fireTop, fireLeft + size, fireTop + size);
+        setFireButtonBounds(fire, size / 2f);
+        setFireballButtonImage(fireRes, size);
+
+        // Ice: bên trái Fire
+        int iceLeft = fireLeft - gap - size;
+        int iceTop  = fireTop;
+        Rect ice = new Rect(iceLeft, iceTop, iceLeft + size, iceTop + size);
+        setIceButtonBounds(ice, size / 2f);
+        setIceButtonImage(iceRes, size);
+
+        // Shield: bên trái Ice
+        int shieldLeft = iceLeft - gap - size;
+        int shieldTop  = iceTop;
+        setShieldButtonBounds(shieldLeft, shieldTop, shieldLeft + size, shieldTop + size);
+        setShieldButtonImage(shieldRes, size);
+    }
+
+    // helper dp -> int
+    private int dpI(float v) {
+        return Math.round(dp(v));
+    }
+
+
+
 }
