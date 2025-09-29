@@ -53,8 +53,12 @@ public class Level1Activity extends AppCompatActivity {
         root.addView(gameView, 0);
 
         // Khi player chết -> GameOver
+    // Trong Level1Activity, sửa listener onGameOver (thêm hide overlay trước finish)
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
+            if (pauseOverlay != null) {
+                pauseOverlay.setVisibility(View.GONE);  // Ẩn overlay pause trước khi chuyển màn
+            }
             startActivity(new Intent(Level1Activity.this, GameOverActivity.class));
             finish();
         }));
@@ -153,11 +157,14 @@ public class Level1Activity extends AppCompatActivity {
         }
     }
 
+    // Trong Level1Activity.onPause(), thêm check để tránh show overlay khi game over
     @Override
     protected void onPause() {
-        if (!gameView.isPaused()) {
+        if (gameView != null && !gameView.isGameOver() && !gameView.isPaused()) {  // Thêm !gameView.isGameOver()
             gameView.setPaused(true);
-            pauseOverlay.setVisibility(View.VISIBLE);
+            if (pauseOverlay != null) {
+                pauseOverlay.setVisibility(View.VISIBLE);
+            }
         }
         if (bgMusic != null && bgMusic.isPlaying()) {
             bgMusic.pause();

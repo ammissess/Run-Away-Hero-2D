@@ -16,8 +16,11 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
+import android.graphics.Color;
+import android.graphics.Paint;
 
 import com.example.game2dfighting.R;
+import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.entity.Heart;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
@@ -68,6 +71,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     // Pause
     private volatile boolean paused = false;
 
+    // Trong GameView, thêm public method isGameOver() (sau fields)
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
     // Game over callback
     public interface GameEventListener { void onGameOver(); }
     private GameEventListener listener;
@@ -77,6 +85,22 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Bitmap bmpSky, bmpIsland, bmpCloud;
     private int skyW, skyH;
     private int islandX, islandY;
+
+    // Hiệu ứng nháy màn hình khi chạm boss
+
+    // Thêm fields vào GameView (sau các fields khác)
+    private long playerHurtUntilMs = 0L;
+    private static final long HURT_LOCK_MS = 300L;  // Lock 300ms sau va chạm để tránh spam attack
+
+    private boolean screenFlash = false;
+    private long flashStartMs = 0L;
+    private static final long FLASH_DURATION_MS = 150L;  // Thời gian nháy
+    private final Paint flashPaint = new Paint();  // Paint overlay đỏ nhạt
+
+
+
+    // Khoảng cách đẩy lùi
+    private static final float PUSH_BACK_DISTANCE = 100f;  // Pixel đẩy lùi
 
     // ================== SHIELD HEARTS (pickup bật giáp) ==================
     private Bitmap bmpShieldHeart;
@@ -195,6 +219,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         timeBgPaint.setColor(Color.argb(120, 0, 0, 0));
 
         resetTimer();
+        // Setup flash paint
+        flashPaint.setColor(Color.argb(100, 255, 100, 100));  // Đỏ nhạt, alpha 100
+        flashPaint.setStyle(Paint.Style.FILL);  // Thêm để fill rect
     }
 
     // ===== Viền map (pixel tính theo bitmap island) =====
@@ -416,11 +443,30 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
 
                 // input -> player
+// Sửa phần input -> player update trong run() (thêm check lock hurt trước player.update)
                 if (player != null) {
                     player.up = movingUp;
                     player.down = movingDown;
                     player.left = movingLeft;
                     player.right = movingRight;
+
+                    // ===== NEW: Lock attack nếu đang hurt (tránh spam chém khi va chạm) =====
+                    long hurtNow = System.currentTimeMillis();
+                    if (hurtNow < playerHurtUntilMs) {
+                        // Force input = false để không trigger RUN/ATTACK
+                        player.up = player.down = player.left = player.right = false;
+                        // Nếu có HURT anim, giữ state HURT; nếu không, set IDLE
+                        try {
+                            if (player.getState() != GameObject.State.HURT) {
+                                player.getClass().getMethod("setState", GameObject.State.class).invoke(player, GameObject.State.HURT);
+                            }
+                        } catch (Throwable ignore) {
+                            // Fallback: set IDLE để dừng attack
+                            try {
+                                player.getClass().getMethod("setState", GameObject.State.class).invoke(player, GameObject.State.IDLE);
+                            } catch (Throwable ignore2) {}
+                        }
+                    }
 
                     player.update(dtMs);
                     clampPlayerToMap();
@@ -449,9 +495,45 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 enemyMgr.updateTowardsPlayer(player, dtMs);
 
                 // boss
+// Sửa collision code trong run() (thay thế phần collision cũ)
                 if (bossMgr != null) {
                     bossMgr.maybeSpawn();
                     bossMgr.update(player, dtMs);
+                }
+
+// ===== NEW: Collision player-enemies/boss + push back + flash =====
+// 1. Collision với Enemies thường (Enemy, Enemy2, Enemy3) - đẩy enemy lùi (không lock player)
+                if (enemyMgr != null) {
+                    for (Enemy en : enemyMgr.list()) {
+                        try {
+                            if (en.getState() == Enemy.State.DIE) continue;
+                        } catch (Throwable ignore) {}
+                        Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
+                        Rect enRect = new Rect(en.x, en.y, en.x + en.w, en.y + en.h);
+                        if (Rect.intersects(playerRect, enRect)) {
+                            // Đẩy enemy lùi (từ player ra enemy), không lock hurt cho player
+                            pushBackEntity(player.centerX(), player.centerY(), en, PUSH_BACK_DISTANCE, false);
+                            // Có thể thêm SFX hoặc hurt player nhẹ nếu cần
+                        }
+                    }
+                }
+
+// 2. Collision với Boss - đẩy player lùi + nháy màn hình + lock hurt
+                if (bossMgr != null && bossMgr.isActive()) {
+                    Boss boss = bossMgr.getBoss();
+                    if (boss != null && boss.getState() != Boss.State.DIE) {
+                        Rect playerRect = new Rect(player.x, player.y, player.x + player.w, player.y + player.h);
+                        Rect bossRect = new Rect(boss.x, boss.y, boss.x + boss.w, boss.y + boss.h);
+                        if (Rect.intersects(playerRect, bossRect)) {
+                            // Đẩy player lùi (từ boss ra player) + lock hurt
+                            pushBackEntity(boss.x + boss.w / 2f, boss.y + boss.h / 2f, player, PUSH_BACK_DISTANCE, true);
+                            // Kích hoạt nháy màn hình
+                            screenFlash = true;
+                            flashStartMs = System.currentTimeMillis();
+                            // Có thể thêm damage cho player hoặc SFX
+                            playPlayerHurtSfx();  // Reuse SFX hurt
+                        }
+                    }
                 }
 
                 // đảm bảo enemy/boss không lọt ra viền map
@@ -554,6 +636,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
 
 
+
                 // === HEARTS ===
                 maybeSpawnHeart();
                 updateHeartsAndPickup();
@@ -587,6 +670,38 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             if (sleep > 0) sleep(sleep);
 
             if (gameOver) isRunning = false;
+        }
+    }
+
+    /**
+     * Đẩy entity lùi theo hướng từ source ra entity (tránh chồng chéo).
+     * @param sourceX, sourceY: Tâm source (boss/enemy)
+     * @param entity: Entity bị đẩy (player hoặc enemy)
+     * @param distance: Khoảng cách đẩy
+     */
+// Sửa method pushBackEntity (thêm param để hỗ trợ lock hurt nếu cần)
+    private void pushBackEntity(float sourceX, float sourceY, GameObject entity, float distance, boolean lockHurt) {
+        if (entity == null) return;
+        float ex = entity.x + entity.w / 2f;
+        float ey = entity.y + entity.h / 2f;
+        float dx = ex - sourceX;
+        float dy = ey - sourceY;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0 && dist < 100f) {  // Chỉ đẩy nếu quá gần (<100px)
+            dx /= dist;
+            dy /= dist;
+            entity.x += dx * distance;
+            entity.y += dy * distance;
+            clampPlayerToMap();  // Clamp player nếu cần
+            if (lockHurt && entity == player) {
+                playerHurtUntilMs = System.currentTimeMillis() + HURT_LOCK_MS;
+                // Force player state to HURT nếu có (giả sử Player có method setState)
+                try {
+                    entity.getClass().getMethod("setState", GameObject.State.class).invoke(entity, GameObject.State.HURT);
+                } catch (Throwable ignore) {
+                    // Fallback: không set state, chỉ lock time
+                }
+            }
         }
     }
 
@@ -793,6 +908,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         float skyDrawY = -cameraY * skyParallax;
         canvas.drawBitmap(bmpSky, skyDrawX, skyDrawY, null);
 
+        // ===== NEW: Vẽ flash overlay nếu đang nháy ===== //
+        if (screenFlash) {
+            long now = System.currentTimeMillis();
+            if (now - flashStartMs > FLASH_DURATION_MS) {
+                screenFlash = false;  // Tắt flash
+            } else {
+                // Fade alpha theo thời gian (nháy nhanh)
+                float progress = (now - flashStartMs) / (float) FLASH_DURATION_MS;
+                int alpha = (int) (100 * (1f - progress));  // Giảm alpha dần
+                flashPaint.setAlpha(alpha);
+                canvas.drawRect(0, 0, getWidth(), getHeight(), flashPaint);
+            }
+        }
         // 2) CLOUDS
         for (Cloud c : clouds) {
             float drawX = c.x - cameraX * c.parallax;
@@ -1099,7 +1227,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
     }
-
 
     // ===== SFX =====
     private void playFireSfx() {

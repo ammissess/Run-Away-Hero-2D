@@ -79,6 +79,11 @@ public class Player extends GameObject {
         setState(State.IDLE);
     }
 
+    //phuong thuc getState
+    public State getState() {
+        return state;  // state từ GameObject
+    }
+
     private void loadAnimations() {
         int[] idleIds = new int[]{
                 R.drawable.p_idle_0, R.drawable.p_idle_1, R.drawable.p_idle_2,
