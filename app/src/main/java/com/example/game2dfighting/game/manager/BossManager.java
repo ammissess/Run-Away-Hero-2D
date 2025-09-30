@@ -23,7 +23,7 @@ public class BossManager {
 
     // Combat timing
     private static final long BOSS_COOLDOWN_MS   = 1200L;   // cooldown đánh của boss
-    private static final long PLAYER_COOLDOWN_MS = 400L;    // cooldown đánh của player
+    private static final long PLAYER_COOLDOWN_MS = 600L;    // cooldown đánh của player
     // NEW: thời gian đứng yên để hiển thị attack rõ ràng (ms)
     private static final long BOSS_ATTACK_LOCK_MS = 1000L;
     private long nextBossAttackAtMs = 0L;

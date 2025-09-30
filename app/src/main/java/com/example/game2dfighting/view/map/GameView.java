@@ -97,6 +97,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private static final long FLASH_DURATION_MS = 150L;  // Thời gian nháy
     private final Paint flashPaint = new Paint();  // Paint overlay đỏ nhạt
 
+    // === Death sequence overlay ===
+    private boolean deathSequence = false;      // đang chạy hiệu ứng chết
+    private long deathStartMs = 0L;             // mốc thời gian bắt đầu hiệu ứng
+    private boolean deathTransitioned = false;  // đã chuyển sang GameOverActivity chưa
+    private final Paint dimPaint = new Paint(); // sơn phủ mờ
+    private Bitmap bmpGameOver;                 // ảnh "gameover"
 
 
     // Khoảng cách đẩy lùi
@@ -394,6 +400,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // Buttons
         setupButtons(getWidth(), getHeight());
 
+        // Death overlay init
+        dimPaint.setColor(Color.BLACK);
+        dimPaint.setAlpha(0);
+
+        // Ảnh "game over": res/drawable/gameover.png
+        bmpGameOver = BitmapFactory.decodeResource(getResources(), R.drawable.gameover);
+
         if (!isRunning) {
             isRunning = true;
             gameThread = new Thread(this);
@@ -645,11 +658,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 maybeSpawnShieldHeart();
                 updateShieldHeartsAndPickup();
 
-
                 if (player.getHp() <= 0) {
-                    gameOver = true;
-                    timerPaused = true;
-                    if (listener != null) listener.onGameOver();
+                    // KHÔNG gọi onGameOver ngay
+                    timerPaused = true;   // dừng đếm thời gian
+                    paused = true;        // dừng update gameplay (player/enemy/boss)
+                    if (!deathSequence) {
+                        deathSequence = true;
+                        deathStartMs = System.currentTimeMillis();
+                    }
                 }
 
                 updatePointsAndLevelUpIfNeeded();
@@ -964,6 +980,40 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // 6) POINTS
         drawPointsOnIsland(canvas);
+
+        // === Death overlay (tối mờ + ảnh gameover trong ~2s) ===
+        if (deathSequence) {
+            long t = System.currentTimeMillis() - deathStartMs;
+
+            // Alpha tăng dần 0 -> 180 trong 2 giây
+            int alpha = (int) Math.min(180, (t * 180) / 2000);
+            dimPaint.setAlpha(alpha);
+
+            // Phủ mờ toàn màn
+            canvas.drawRect(0, 0, getWidth(), getHeight(), dimPaint);
+
+            // Vẽ ảnh "game over" ở giữa, scale vừa khung
+            if (bmpGameOver != null) {
+                float maxW = getWidth() * 0.6f;   // tối đa 60% chiều rộng màn
+                float maxH = getHeight() * 0.3f;  // tối đa 30% chiều cao màn
+                float scale = Math.min(maxW / bmpGameOver.getWidth(), maxH / bmpGameOver.getHeight());
+
+                float drawW = bmpGameOver.getWidth() * scale;
+                float drawH = bmpGameOver.getHeight() * scale;
+                float x = (getWidth() - drawW) / 2f;
+                float y = (getHeight() - drawH) / 2f;
+
+                Rect dst = new Rect((int) x, (int) y, (int) (x + drawW), (int) (y + drawH));
+                canvas.drawBitmap(bmpGameOver, null, dst, null);
+            }
+
+            // Sau 2 giây mới chuyển màn
+            if (t >= 2000 && !deathTransitioned) {
+                deathTransitioned = true;
+                gameOver = true;  // cho game loop dừng
+                if (listener != null) listener.onGameOver(); // Level1Activity sẽ start GameOverActivity
+            }
+        }
 
         // 7) HUD + Buttons
         if (playerHud != null) {
