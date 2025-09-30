@@ -74,6 +74,12 @@ public class EnemyManager {
     private CombatListener combatListener = null;
     public void setCombatListener(CombatListener l) { this.combatListener = l; }
 
+    //Tính điểm
+    public interface KillListener { void onEnemyKilled(); }
+    private KillListener killListener;
+    public void setKillListener(KillListener l) { this.killListener = l; }
+
+
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
         this.ctx = ctx; this.mapW = mapW; this.mapH = mapH;
@@ -245,7 +251,10 @@ public class EnemyManager {
             hp = Math.max(0, hp - PLAYER_DAMAGE);
             enemyHp.put(e, hp);
             nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
-            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+            if (hp == 0) {
+                try { e.onDie(); } catch (Throwable ignore) {}
+                if (killListener != null) killListener.onEnemyKilled();   // <-- THÊM
+            }
         }
     }
 
@@ -268,7 +277,10 @@ public class EnemyManager {
             hp = Math.max(0, hp - PLAYER_DAMAGE);
             enemyHp.put(e, hp);
             nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
-            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+            if (hp == 0) {
+                try { e.onDie(); } catch (Throwable ignore) {}
+                if (killListener != null) killListener.onEnemyKilled();   // <-- THÊM
+            }
         }
     }
 
@@ -291,7 +303,10 @@ public class EnemyManager {
             hp = Math.max(0, hp - PLAYER_DAMAGE);
             enemyHp.put(e, hp);
             nextPlayerAttackAtMs = now + PLAYER_COOLDOWN_MS;
-            if (hp == 0) try { e.onDie(); } catch (Throwable ignore) {}
+            if (hp == 0) {
+                try { e.onDie(); } catch (Throwable ignore) {}
+                if (killListener != null) killListener.onEnemyKilled();   // <-- THÊM
+            }
         }
     }
 
@@ -326,6 +341,7 @@ public class EnemyManager {
         if (hp <= 0) {
             enemyHp.put(e, 0);
             e.onDie();
+            if (killListener != null) killListener.onEnemyKilled();
         } else {
             enemyHp.put(e, hp);
         }

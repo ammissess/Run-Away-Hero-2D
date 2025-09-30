@@ -39,6 +39,12 @@ public class BossManager {
     private final Paint hpFg = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint hpOutline = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    // Tính điểm
+    public interface KillListener { void onBossKilled(); }
+    private KillListener killListener;
+    public void setKillListener(KillListener l) { this.killListener = l; }
+
+
     /** Dùng ctor này nếu muốn đổi thời gian xuất hiện (ms). */
     public BossManager(Context ctx, int mapW, int mapH, long appearAfterMs) {
         this.ctx = ctx;
@@ -160,6 +166,7 @@ public class BossManager {
                     // Kết liễu: vào DIE ngay, KHÔNG gọi onHurt trước để không cắt die anim
                     if (boss.getState() != Boss.State.DIE) {
                         try { boss.onDie(); } catch (Throwable ignore) {}
+                        if (killListener != null) killListener.onBossKilled();
                     }
                 } else if (bossHp < oldHp) {
                     try { boss.onHurt(); } catch (Throwable ignore) {}
@@ -182,6 +189,7 @@ public class BossManager {
         if (bossHp == 0) {
             if (boss.getState() != Boss.State.DIE) {
                 try { boss.onDie(); } catch (Throwable ignore) {}
+                if (killListener != null) killListener.onBossKilled();
             }
         } else if (bossHp < oldHp) {
             try { boss.onHurt(); } catch (Throwable ignore) {}

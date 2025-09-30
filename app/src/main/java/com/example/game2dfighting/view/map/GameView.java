@@ -136,6 +136,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private boolean timerPaused = false;
     private final Paint timePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint timeBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private android.graphics.RectF timePillRect = null;
 
     private volatile boolean gameOver = false;
 
@@ -191,6 +192,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private static final long HEART_SPAWN_INTERVAL_MS = 5000L; // 5s
     private static final int HEART_HEAL_HP = 10;
     private static final int HEART_MAX_ON_MAP = 3;
+
+    // GameView.java (fields)
+    private int score = 0;
+    private long gameStartMs = System.currentTimeMillis();
+
+    // ...
+    public void resetScore() { score = 0; }
+    public void addScore(int delta) { score = Math.max(0, score + delta); }
+    public int getScore() { return score; }
+
 
     // SFX khi nhặt tim (tuỳ chọn)
     private int sfxPickupId = 0;
@@ -327,6 +338,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
         // Boss: xuất hiện sau 50s
         bossMgr = new BossManager(getContext(), mapWidth, mapHeight); // mặc định 50_000ms
+
+        //Tính điểm quái vs boss
+        enemyMgr.setKillListener(() -> addScore(10));    // quái: +10
+        bossMgr.setKillListener(() -> addScore(100));    // boss: +100
 
         // NEW: HUD + PlayerManager
         playerHud = new PlayerHudRenderer(getContext());
@@ -1039,26 +1054,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             playerHud.drawIceButton(canvas);
             playerHud.drawShieldButton(canvas);
         }
+
+        //Vẽ Time vs Score
         drawTimer(canvas);
-       // drawPauseButton(canvas);
-
- /* xoa overlay pause
-        // Overlay pause
-        if (paused) {
-            Paint dim = new Paint();
-            dim.setColor(Color.argb(120, 0, 0, 0));
-            canvas.drawRect(0, 0, getWidth(), getHeight(), dim);
-
-            Paint t = new Paint(Paint.ANTI_ALIAS_FLAG);
-            t.setColor(Color.WHITE);
-            t.setTextSize(128f);
-            t.setTextAlign(Paint.Align.CENTER);
-            float centerX = getWidth() / 2f;
-            float centerY = getHeight() / 2f;
-            canvas.drawText("PAUSE", centerX, centerY, t);
-        }
-        */
-
+        drawScore(canvas);
 
         // 8) Audio toggles (vẽ sau cùng)
         drawAudioToggles(canvas);
@@ -1090,6 +1089,71 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         canvas.drawRoundRect(rectLeft, rectTop, rectRight, rectBottom, 24f, 24f, timeBgPaint);
         float baselineY = rectTop + paddingY - fm.top;
         canvas.drawText(timeText, cx, baselineY, timePaint);
+
+        // LƯU lại khung TIME để vẽ SCORE dựa vào
+        if (timePillRect == null) timePillRect = new android.graphics.RectF();
+        timePillRect.set(rectLeft, rectTop, rectRight, rectBottom);
+    }
+
+    // Vẽ SCORE ở góc phải trên, pill bo tròn giống style TIME
+    private void drawScore(Canvas canvas) {
+        // Text style: tái dùng timePaint cho đồng bộ
+        Paint text = new Paint(timePaint);
+        text.setTextAlign(Paint.Align.LEFT);
+
+        Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG);
+        bg.setColor(Color.argb(120, 0, 0, 0));
+        Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+        stroke.setStyle(Paint.Style.STROKE);
+        stroke.setStrokeWidth(4f);
+        stroke.setColor(Color.WHITE);
+
+        String scoreText = "SCORE " + score;
+
+        // Đo kích thước pill SCORE
+        float padX = 24f, padY = 12f;
+        Paint.FontMetrics fm = text.getFontMetrics();
+        float textW = text.measureText(scoreText);
+        float textH = fm.bottom - fm.top;
+        float pillW = textW + padX * 2f;
+        float pillH = textH + padY * 2f;
+
+        // Hàng trên cùng (cùng Top với TIME)
+        float top = (timePillRect != null) ? timePillRect.top : 24f;
+        float bottom = top + pillH;
+
+        // Vị trí mong muốn: ngay bên phải TIME, cách 12dp
+        float gap = dp(12);
+        float desiredLeft = (timePillRect != null) ? (timePillRect.right + gap) : (canvas.getWidth() * 0.55f);
+        float desiredRight = desiredLeft + pillW;
+
+        // Biên an toàn bên phải: nếu có PauseBtnRect thì né nó, còn không thì dùng lề 24px
+        float rightSafe = canvas.getWidth() - 24f;
+        if (pauseBtnRect != null) {
+            rightSafe = Math.min(rightSafe, pauseBtnRect.left - dp(12)); // cách Pause thêm 12dp
+        }
+
+        // Nếu SCORE tràn vào vùng Pause/biên phải thì lùi sang trái để vừa khít
+        float shift = Math.max(0f, desiredRight - rightSafe);
+        float left = desiredLeft - shift;
+        float right = left + pillW;
+
+        // Nếu vẫn còn chạm TIME (màn hình nhỏ, chữ dài), đảm bảo tối thiểu cách TIME 8dp
+        if (timePillRect != null) {
+            float minLeft = timePillRect.right + dp(8);
+            if (left < minLeft) {
+                left = minLeft;
+                right = left + pillW;
+            }
+        }
+
+        // Vẽ
+        float radius = 24f;
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, bg);
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, stroke);
+
+        float baseline = top + padY - fm.top;
+        canvas.drawText(scoreText, left + padX, baseline, text);
     }
 
     private void drawPointsOnIsland(Canvas canvas) {
