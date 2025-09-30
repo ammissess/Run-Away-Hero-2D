@@ -1016,6 +1016,23 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
 
         // 7) HUD + Buttons
+        if (playerHud != null && playerMgr != null) {
+            long rf = playerMgr.getRemainingCooldownMs(PlayerManager.SkillType.FIREBALL);
+            long tf = playerMgr.getCooldownMs(PlayerManager.SkillType.FIREBALL);
+            float fireRatio = (tf > 0) ? (rf / (float) tf) : 0f;
+
+            long ri = playerMgr.getRemainingCooldownMs(PlayerManager.SkillType.ICESPIKE);
+            long ti = playerMgr.getCooldownMs(PlayerManager.SkillType.ICESPIKE);
+            float iceRatio = (ti > 0) ? (ri / (float) ti) : 0f;
+
+            long rs = playerMgr.getRemainingCooldownMs(PlayerManager.SkillType.SHIELD);
+            long ts = playerMgr.getCooldownMs(PlayerManager.SkillType.SHIELD);
+            float shieldRatio = (ts > 0) ? (rs / (float) ts) : 0f;
+
+            playerHud.setFireCooldownRatio(fireRatio);
+            playerHud.setIceCooldownRatio(iceRatio);
+            playerHud.setShieldCooldownRatio(shieldRatio);
+        }
         if (playerHud != null) {
             playerHud.draw(canvas, player, getWidth(), getHeight()); // nếu bạn đã có hàm draw tổng
             playerHud.drawFireButton(canvas); // NEW: vẽ nút bắn bằng PNG

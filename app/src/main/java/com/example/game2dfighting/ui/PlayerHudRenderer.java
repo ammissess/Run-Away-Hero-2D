@@ -40,6 +40,11 @@ public class PlayerHudRenderer {
     private Bitmap shieldBtn;
     private RectF shieldBtnRect = new RectF();
 
+    // Cooldown UI (0f = sẵn sàng, 1f = vừa bấm xong)
+    private float fireCdRatio   = 0f;
+    private float iceCdRatio    = 0f;
+    private float shieldCdRatio = 0f;
+
     public PlayerHudRenderer(Context ctx) {
         this.ctx = ctx;
 
@@ -134,6 +139,7 @@ public class PlayerHudRenderer {
         p.setStrokeWidth(6f);
         p.setColor(Color.BLACK);
         c.drawCircle(fireBtnRect.exactCenterX(), fireBtnRect.exactCenterY(), fireBtnRadiusPx, p);
+        drawCooldownOverlay(c, fireBtnRect, fireCdRatio);
     }
     public boolean isInFireButton(float x, float y) {
         return fireBtnRect != null && fireBtnRect.contains((int)x, (int)y);
@@ -159,6 +165,7 @@ public class PlayerHudRenderer {
         p.setStrokeWidth(6f);
         p.setColor(Color.BLACK);
         c.drawCircle(iceBtnRect.exactCenterX(), iceBtnRect.exactCenterY(), iceBtnRadiusPx, p);
+        drawCooldownOverlay(c, iceBtnRect, iceCdRatio);
     }
 
     public boolean isInIceButton(float x, float y) {
@@ -201,6 +208,13 @@ public class PlayerHudRenderer {
             p.setStrokeWidth(6f);
             p.setColor(Color.CYAN);
             c.drawCircle(cx, cy, radius, p);
+            drawCooldownOverlay(c, new Rect(
+                    (int)(cx - radius),
+                    (int)(cy - radius),
+                    (int)(cx + radius),
+                    (int)(cy + radius)
+            ), shieldCdRatio);
+
         }
     }
 
@@ -239,6 +253,44 @@ public class PlayerHudRenderer {
         return Math.round(dp(v));
     }
 
+    // Setter — GameView gọi mỗi frame trước khi vẽ
+    public void setFireCooldownRatio(float r){ fireCdRatio = clamp01(r); }
+    public void setIceCooldownRatio(float r){ iceCdRatio  = clamp01(r); }
+    public void setShieldCooldownRatio(float r){ shieldCdRatio = clamp01(r); }
 
+    private void drawCooldownOverlay(Canvas c, Rect dstRect, float ratio) {
+        if (dstRect == null) return;
+        ratio = clamp01(ratio);
+        if (ratio <= 0f) return;
+
+        // Tính hình tròn khớp với icon
+        float cx = dstRect.exactCenterX();
+        float cy = dstRect.exactCenterY();
+        float radius = Math.min(dstRect.width(), dstRect.height()) / 2f;
+
+        // 1) Lớp phủ mờ dạng TRÒN
+        Paint dim = new Paint(Paint.ANTI_ALIAS_FLAG);
+        dim.setColor(Color.BLACK);
+        dim.setAlpha(140);
+        c.drawCircle(cx, cy, radius, dim);
+
+        // 2) “Pie” cooldown TRÒN (quạt từ đỉnh -90°)
+        float inner = radius - dp(2); // chừa mép viền đẹp hơn
+        RectF oval = new RectF(cx - inner, cy - inner, cx + inner, cy + inner);
+
+        Paint pie = new Paint(Paint.ANTI_ALIAS_FLAG);
+        pie.setColor(Color.WHITE);
+        pie.setAlpha(90);
+        pie.setStyle(Paint.Style.FILL);
+        c.drawArc(oval, -90f, 360f * ratio, true, pie);
+
+        // 3) Viền mảnh tròn (tùy chọn, giúp rõ hình)
+        Paint border = new Paint(Paint.ANTI_ALIAS_FLAG);
+        border.setStyle(Paint.Style.STROKE);
+        border.setStrokeWidth(dp(2));
+        border.setColor(Color.WHITE);
+        border.setAlpha(160);
+        c.drawCircle(cx, cy, inner, border);
+    }
 
 }

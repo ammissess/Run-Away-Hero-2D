@@ -185,4 +185,10 @@ public class PlayerManager {
             player.addShield(50, 5000, Player.ShieldType.NORMAL);
         }
     }
+
+    public long getCooldownMs(SkillType type) {
+        SkillConfig cfg = configs.get(type);
+        return (cfg != null) ? cfg.cooldownMs : 0L;
+    }
+
 }
