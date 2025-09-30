@@ -52,6 +52,27 @@ public class Level1Activity extends AppCompatActivity {
         // QUAN TRỌNG: Add vào index 0 để các view từ XML vẫn ở trên
         root.addView(gameView, 0);
 
+        // Sau root.addView(gameView, 0);
+        gameView.setAudioControl(enabled -> {
+            if (bgMusic == null) return;
+
+            if (enabled) {
+                // Chỉ phát khi game không pause và user bật music
+                if (!gameView.isPaused() && !bgMusic.isPlaying()) {
+                    bgMusic.start();
+                    fadeIn(bgMusic, 300);
+                }
+            } else {
+                // Tắt ngay khi user tắt music
+                if (bgMusic.isPlaying()) {
+                    bgMusic.pause();
+                }
+                // Có thể tua về 0 nếu muốn:
+                // bgMusic.seekTo(0);
+            }
+        });
+
+
         // Khi player chết -> GameOver
     // Trong Level1Activity, sửa listener onGameOver (thêm hide overlay trước finish)
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
