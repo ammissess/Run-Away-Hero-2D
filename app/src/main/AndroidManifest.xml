@@ -39,6 +39,11 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <activity android:name=".view.HighScoreActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"/>
+
+
     </application>
 
 </manifest>

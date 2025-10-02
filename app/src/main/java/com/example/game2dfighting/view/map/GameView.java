@@ -18,7 +18,7 @@ import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.graphics.Color;
 import android.graphics.Paint;
-
+import android.content.Intent;
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.entity.Heart;
@@ -29,6 +29,7 @@ import com.example.game2dfighting.game.manager.EnemyManager;
 import com.example.game2dfighting.game.manager.BossManager;
 import com.example.game2dfighting.game.manager.PlayerManager;
 import com.example.game2dfighting.game.manager.PlayerManager.SkillType;
+import com.example.game2dfighting.game.manager.ScoreManager;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
 import com.example.game2dfighting.ui.PlayerHudRenderer;
@@ -197,11 +198,18 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private int score = 0;
     private long gameStartMs = System.currentTimeMillis();
 
-    // ...
+    // Score
     public void resetScore() { score = 0; }
     public void addScore(int delta) { score = Math.max(0, score + delta); }
     public int getScore() { return score; }
 
+    // === Boss defeated overlay ===
+    private boolean bossDefeated = false;
+    private long bossDefeatAtMs = 0L;
+    private boolean bossTransitioned = false;
+    private float bossFadeAlpha = 0f; // 0..1
+    private static final long BOSS_CONGRATS_DURATION_MS = 2000L;
+    private Bitmap bmpCongrats; // R.drawable.congratulations
 
     // SFX khi nhặt tim (tuỳ chọn)
     private int sfxPickupId = 0;
@@ -291,6 +299,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         return (int)(elapsedMs / 1000);
     }
 
+    private long getElapsedMs() {
+        long now = System.currentTimeMillis();
+        long elapsedMs = timerPaused
+                ? (pauseStartMs - timerStartMs - pausedAccumulatedMs)
+                : (now - timerStartMs - pausedAccumulatedMs);
+        if (elapsedMs < 0) elapsedMs = 0;
+        return elapsedMs;
+    }
+
+    // Tính elapsed thật sự kể cả đang pause hay không
+    private long getElapsedMsAccurate() {
+        long now = System.currentTimeMillis();
+        long extraPaused = timerPaused ? (now - pauseStartMs) : 0L;
+        long elapsed = now - timerStartMs - (pausedAccumulatedMs + extraPaused);
+        return Math.max(0L, elapsed);
+    }
+
+
     // ===== Pause API =====
     public void setPaused(boolean paused) {
         this.paused = paused;
@@ -336,12 +362,31 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             @Override public void onPlayerHit() { playPlayerHurtSfx(); }
         });
 
-        // Boss: xuất hiện sau 50s
-        bossMgr = new BossManager(getContext(), mapWidth, mapHeight); // mặc định 50_000ms
+        // Boss
+        bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
 
-        //Tính điểm quái vs boss
+        // Tính điểm quái vs boss
         enemyMgr.setKillListener(() -> addScore(10));    // quái: +10
-        bossMgr.setKillListener(() -> addScore(100));    // boss: +100
+        bossMgr.setKillListener(() -> {
+            addScore(100);
+
+            if (!bossDefeated && !deathSequence) {
+                // 👉 lấy elapsed TRƯỚC khi pause
+                long elapsed = getElapsedMsAccurate();
+                ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis());
+
+                // rồi mới pause + bật overlay
+                timerPaused = true;
+                bossDefeated = true;
+                bossDefeatAtMs = System.currentTimeMillis();
+                bossTransitioned = false;
+                bossFadeAlpha = 0f;
+            }
+        });
+
+
+        // Load ảnh chúc mừng
+        bmpCongrats = BitmapFactory.decodeResource(getResources(), R.drawable.congratulations);
 
         // NEW: HUD + PlayerManager
         playerHud = new PlayerHudRenderer(getContext());
@@ -996,6 +1041,37 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // 6) POINTS
         drawPointsOnIsland(canvas);
 
+        // === Boss defeated overlay (mờ + ảnh chúc mừng + auto transition) ===
+        if (bossDefeated && !deathSequence) {
+            // tăng alpha mờ
+            bossFadeAlpha = Math.min(1f, bossFadeAlpha + 0.04f);
+            int a = (int) (bossFadeAlpha * 180); // 0..180/255
+            Paint dim = new Paint();
+            dim.setColor(Color.BLACK);
+            dim.setAlpha(a);
+            canvas.drawRect(0, 0, getWidth(), getHeight(), dim);
+
+            // Vẽ ảnh congratulations ở giữa
+            if (bmpCongrats != null) {
+                float maxW = getWidth() * 0.6f;
+                float maxH = getHeight() * 0.3f;
+                float scale = Math.min(maxW / bmpCongrats.getWidth(), maxH / bmpCongrats.getHeight());
+                int w = (int) (bmpCongrats.getWidth() * scale);
+                int h = (int) (bmpCongrats.getHeight() * scale);
+                int left = (getWidth() - w) / 2;
+                int top  = (getHeight() - h) / 2;
+                Rect dst = new Rect(left, top, left + w, top + h);
+                canvas.drawBitmap(bmpCongrats, null, dst, null);
+            }
+
+            // Sau 2s thì chuyển High Score
+            long t = System.currentTimeMillis() - bossDefeatAtMs;
+            if (t >= BOSS_CONGRATS_DURATION_MS && !bossTransitioned) {
+                bossTransitioned = true;
+                openHighScoreScreen();
+            }
+        }
+
         // === Death overlay (tối mờ + ảnh gameover trong ~2s) ===
         if (deathSequence) {
             long t = System.currentTimeMillis() - deathStartMs;
@@ -1180,14 +1256,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             );
         }
 
-/* xoa pause render
-        // Pause top-right
-        int pauseSize = (int) (64 * getResources().getDisplayMetrics().density);
-        int pauseLeft = w - margin - pauseSize;
-        int pauseTop  = margin;
-        pauseBtnRect = new Rect(pauseLeft, pauseTop, pauseLeft + pauseSize, pauseTop + pauseSize);
-        pauseBtnRadiusPx = pauseSize / 2f;
-*/
         // Music/Sound bottom-center (horizontal)
         int audioSize = (int) dp(56);
         int spacing   = (int) dp(12);
@@ -1219,27 +1287,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         c.drawLine(cx - fireBtnRadiusPx * 0.4f, cy,
                 cx + fireBtnRadiusPx * 0.4f, cy, p);
     }
-
-    // ===== Pause button (UI) =====
- /*   private void drawPauseButton(Canvas c) {
-        if (pauseBtnRect == null) return;
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-        p.setStyle(Paint.Style.FILL);
-        p.setColor(Color.argb(180, 0, 0, 0));
-        float cx = pauseBtnRect.exactCenterX();
-        float cy = pauseBtnRect.exactCenterY();
-        c.drawCircle(cx, cy, pauseBtnRadiusPx, p);
-
-        p.setStyle(Paint.Style.STROKE);
-        p.setStrokeWidth(6f);
-        p.setColor(Color.WHITE);
-        float barW = pauseBtnRadiusPx * 0.3f;
-        float barH = pauseBtnRadiusPx * 0.9f;
-        c.drawLine(cx - barW, cy - barH/2f, cx - barW, cy + barH/2f, p);
-        c.drawLine(cx + barW, cy - barH/2f, cx + barW, cy + barH/2f, p);
-    }
-    */
 
     private boolean isInFireButton(float x, float y) {
         return playerHud != null && playerHud.isInFireButton(x, y);
@@ -1521,5 +1568,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             h.draw(canvas, offX, offY);
         }
     }
+
+    private boolean highScoreLaunched = false;
+    private void openHighScoreScreen() {
+        if (highScoreLaunched) return;
+        highScoreLaunched = true;
+        Context ctx = getContext();
+        Intent i = new Intent(ctx, com.example.game2dfighting.view.HighScoreActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        ctx.startActivity(i);
+    }
+
 
 }

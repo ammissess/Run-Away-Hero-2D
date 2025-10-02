@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Game RUN HERO</string>
+    <string name="app_name">RUN HERO</string>
     <string name="pause">Pause</string>
     <string name="resume">Resume</string>
     <string name="quit">Quit</string>

@@ -49,6 +49,13 @@ public class GameOverActivity extends AppCompatActivity {
             finish();
         });
 
+        Button btnRanking = findViewById(R.id.btn_rank);
+        btnRanking.setOnClickListener(v -> {
+            Intent i = new Intent(GameOverActivity.this, com.example.game2dfighting.view.HighScoreActivity.class);
+            startActivity(i);
+        });
+
+
         btnQuit.setOnClickListener(v -> {
             if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                 mediaPlayer.pause();
