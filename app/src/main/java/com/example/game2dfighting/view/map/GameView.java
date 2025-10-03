@@ -16,8 +16,6 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.content.Intent;
 import com.example.game2dfighting.R;
 import com.example.game2dfighting.game.core.GameObject;
@@ -25,10 +23,9 @@ import com.example.game2dfighting.game.entity.Heart;
 import com.example.game2dfighting.game.entity.Player;
 import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.entity.Boss;
-import com.example.game2dfighting.game.manager.EnemyManager;
 import com.example.game2dfighting.game.manager.BossManager;
+import com.example.game2dfighting.game.manager.EnemyManager;
 import com.example.game2dfighting.game.manager.PlayerManager;
-import com.example.game2dfighting.game.manager.PlayerManager.SkillType;
 import com.example.game2dfighting.game.manager.ScoreManager;
 import com.example.game2dfighting.game.skill.Fireball;
 import com.example.game2dfighting.game.skill.IceSpike;
@@ -216,6 +213,27 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private static final long BOSS_CONGRATS_DURATION_MS = 2000L;
     private Bitmap bmpCongrats; // R.drawable.congratulations
 
+    // Cho phép Activity cấu hình respawn của BossManager
+    // Cho phép Activity cấu hình respawn của BossManager
+    public void setBossRespawnDelayMs(long ms) {
+        if (bossMgr != null) {
+            bossMgr.setRespawnDelayMs(ms);
+        } else {
+            // bossMgr chưa có (chưa surfaceCreated) -> lưu lại để apply sau
+            pendingBossRespawnDelayMs = ms;
+        }
+    }
+
+
+    // Lưu cấu hình respawn nếu Activity gọi trước khi bossMgr được tạo
+    private long pendingBossRespawnDelayMs = -1L;
+
+
+    // Bật/tắt việc thắng ngay khi giết boss (Level1: true, Level2/3: false)
+    private boolean bossKillGrantsWin = true;
+    public void setBossKillGrantsWin(boolean enabled) { this.bossKillGrantsWin = enabled; }
+
+
     // SFX khi nhặt tim (tuỳ chọn)
     private int sfxPickupId = 0;
 
@@ -370,10 +388,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         // Boss
         bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
 
+        // Nếu Activity đã cấu hình trước -> apply lại
+        if (pendingBossRespawnDelayMs >= 0L) {
+            bossMgr.setRespawnDelayMs(pendingBossRespawnDelayMs);
+            // (giữ nguyên giá trị để Level2/3 có thể gọi lại lần nữa nếu muốn)
+        }
+
         // Tính điểm quái vs boss
         enemyMgr.setKillListener(() -> addScore(10));    // quái: +10
         bossMgr.setKillListener(() -> {
             addScore(100);
+
+            // Nếu level KHÔNG cho thắng khi giết boss -> chỉ cộng điểm, để BossManager tự respawn (nếu có cấu hình)
+            if (!bossKillGrantsWin) {
+                return;
+            }
 
             if (!bossDefeated && !deathSequence) {
                 // 👉 lấy elapsed TRƯỚC khi pause
@@ -388,6 +417,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 bossFadeAlpha = 0f;
             }
         });
+
 
 
         // Load ảnh chúc mừng
@@ -1584,6 +1614,20 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         Intent i = new Intent(ctx, com.example.game2dfighting.view.HighScoreActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         ctx.startActivity(i);
+    }
+
+    // Kích hoạt trạng thái thắng: lưu điểm/thời gian + bật overlay "Congratulations" rồi tự chuyển HighScore
+    public void triggerWinByCondition() {
+        if (!bossDefeated && !deathSequence) {
+            long elapsed = getElapsedMsAccurate();
+            ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis(), levelName);
+
+            timerPaused = true;                // dừng thời gian
+            bossDefeated = true;               // bật overlay chúc mừng
+            bossDefeatAtMs = System.currentTimeMillis();
+            bossTransitioned = false;
+            bossFadeAlpha = 0f;
+        }
     }
 
 

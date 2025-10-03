@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -68,6 +69,29 @@ public class Level3Activity extends AppCompatActivity {
 
         // Gắn tên level để lưu điểm vào cột Level3
         gameView.setLevelName("Level3"); // hoặc "Hard"
+
+        // ========= RULES CHO LEVEL 3 =========
+        // 1) Giết boss KHÔNG thắng (thắng theo điểm)
+        gameView.setBossKillGrantsWin(false);
+        // 2) Boss hồi sinh sau 10s
+        gameView.setBossRespawnDelayMs(10_000L);
+        // 3) Điều kiện thắng: điểm >= 500 -> hiển thị overlay Congratulations + SAVE + auto chuyển HighScore
+        final Handler lv3WinHandler = new Handler(Looper.getMainLooper());
+        final Runnable lv3Check = new Runnable() {
+            @Override public void run() {
+                if (!gameView.isGameOver()) {
+                    if (gameView.getScore() >= 500) {
+                        // KHÔNG mở HighScore trực tiếp.
+                        // Gọi GameView để hiện overlay “Congratulations” và SAVE rồi tự chuyển HighScore.
+                        gameView.triggerWinByCondition();
+                        return;
+                    }
+                    lv3WinHandler.postDelayed(this, 500);
+                }
+            }
+        };
+        lv3WinHandler.postDelayed(lv3Check, 500);
+        // =====================================
 
         // Khi player chết -> GameOver
         gameView.setGameEventListener(() -> runOnUiThread(() -> {

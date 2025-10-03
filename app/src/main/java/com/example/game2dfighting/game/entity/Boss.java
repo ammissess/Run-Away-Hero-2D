@@ -24,7 +24,7 @@ public class Boss extends GameObject {
     private final Context ctx;
 
     // ===== Stats cơ bản của Boss =====
-    public static final int BASE_HP     = 400;
+    public static final int BASE_HP     = 200;
     public static final int BASE_SPEED  = 2;
     public static final int BASE_DAMAGE = 15;
 

@@ -17,6 +17,12 @@ public class BossManager {
     private Boss boss = null;
     private boolean spawned = false;
 
+    // ======= NEW: cấu hình respawn =======
+    /** 0 = không respawn; >0 = delay ms để respawn sau khi boss chết */
+    private long respawnDelayMs = 0L;
+    /** mốc thời gian cho lần spawn tiếp theo (dùng cho respawn) */
+    private long nextSpawnAtMs = -1L;
+
     // Thời điểm xuất hiện boss (ms sau khi tạo manager)
     private final long bossStartAtMs;
     private final long startTime = System.currentTimeMillis();
@@ -59,6 +65,14 @@ public class BossManager {
         this(ctx, mapW, mapH, 10_000L);
     }
 
+    // ======= NEW: setter cấu hình respawn từ bên ngoài (GameView gọi) =======
+    public void setRespawnDelayMs(long delayMs) {
+        this.respawnDelayMs = Math.max(0L, delayMs);
+    }
+
+    // Đánh dấu đã spawn lần đầu hay chưa
+    private boolean initialSpawnDone = false;
+
     // ===== Trạng thái =====
     public boolean isActive()    { return boss != null && boss.getState() != Boss.State.DIE; }
     public boolean isSpawned()   { return spawned; }
@@ -67,11 +81,19 @@ public class BossManager {
     public int  getHp()          { return bossHp; }
     public int  getHpMax()       { return Boss.BASE_HP; }
 
+
+
     // ===== Spawn =====
     public void maybeSpawn() {
         if (spawned) return;
-        long elapsed = System.currentTimeMillis() - startTime;
-        if (elapsed >= bossStartAtMs) {
+        long now = System.currentTimeMillis();
+        long elapsed = now - startTime;
+
+        // Lần đầu xuất hiện sau bossStartAtMs; các lần sau chỉ theo nextSpawnAtMs
+        boolean canInitial = (!initialSpawnDone && elapsed >= bossStartAtMs);
+        boolean canRespawn = (nextSpawnAtMs > 0 && now >= nextSpawnAtMs);
+
+        if (canInitial || canRespawn) {
             spawned = true;
             int bw = 200, bh = 200;
             int bx = (mapW - bw) / 2;
@@ -81,8 +103,12 @@ public class BossManager {
             bossHp = Boss.BASE_HP;
             nextBossAttackAtMs = 0L;
             nextPlayerAttackAtMs = 0L;
+
+            if (canInitial) initialSpawnDone = true; // đánh dấu đã spawn lần đầu
+            nextSpawnAtMs = -1L; // clear mốc respawn cũ
         }
     }
+
 
     // ===== Update + Combat =====
     public void update(Player p, long dtMs) {
@@ -95,13 +121,18 @@ public class BossManager {
         if (boss.getState() == Boss.State.DIE) {
             if (boss.isDieAnimDone()) {
                 if (killListener != null) {
+                    // KHÔNG set killListener = null; -> để lần kill sau vẫn báo/cộng điểm
                     killListener.onBossKilled();
-                    killListener = null; // gọi 1 lần duy nhất
                 }
                 boss = null;
+                spawned = false;
+                if (respawnDelayMs > 0L) {
+                    nextSpawnAtMs = System.currentTimeMillis() + respawnDelayMs; // respawn sau 10s chẳng hạn
+                }
             }
             return;
         }
+
 
         // Pursue trừ khi đang ATTACK
         if (boss.getState() != Boss.State.ATTACK) {
@@ -142,7 +173,7 @@ public class BossManager {
                 if (bossHp == 0) {
                     if (boss.getState() != Boss.State.DIE) {
                         try { boss.onDie(); } catch (Throwable ignore) {}
-                        // ❌ không notify ở đây nữa
+                        // ❌ không notify ở đây nữa (notify chuyển vào khi anim DIE xong ở trên)
                     }
                 } else if (bossHp < oldHp) {
                     try { boss.onHurt(); } catch (Throwable ignore) {}

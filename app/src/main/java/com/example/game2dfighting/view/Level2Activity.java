@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -68,6 +69,30 @@ public class Level2Activity extends AppCompatActivity {
 
         // Gắn tên level để lưu điểm vào cột Level2
         gameView.setLevelName("Level2"); // hoặc "Normal"
+
+        // ========= RULES CHO LEVEL 2 =========
+        // 1) Giết boss KHÔNG thắng (thắng chỉ khi sống sót đủ thời gian)
+        gameView.setBossKillGrantsWin(false);
+        // 2) Boss hồi sinh sau 10s mỗi lần bị hạ
+        gameView.setBossRespawnDelayMs(10_000L);
+        // 3) Điều kiện thắng: sống sót >= 180 giây (3 phút)
+        final Handler lv2WinHandler = new Handler(Looper.getMainLooper());
+        final Runnable lv2Check = new Runnable() {
+            @Override public void run() {
+                // chỉ check khi chưa game over
+                if (!gameView.isGameOver()) {
+                    if (gameView.getElapsedSeconds() >= 120) {
+                        // ✅ Gọi overlay + SAVE (giống Level1). GameView sẽ tự chuyển HighScore sau overlay.
+                        gameView.triggerWinByCondition();
+                        return;
+                    }
+                    // tiếp tục kiểm tra mỗi 0.5s
+                    lv2WinHandler.postDelayed(this, 500);
+                }
+            }
+        };
+        lv2WinHandler.postDelayed(lv2Check, 500);
+        // =====================================
 
         // Khi player chết -> GameOver
         gameView.setGameEventListener(() -> runOnUiThread(() -> {

@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.Style;
 
-import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.entity.Boss;
 import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.entity.Player;

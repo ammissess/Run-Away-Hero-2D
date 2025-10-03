@@ -13,7 +13,7 @@ import com.example.game2dfighting.game.core.SpriteAnim;
 public class Enemy2 extends Enemy {
 
     // === Stats riêng cho Enemy2 ===
-    public static final int BASE_HP     = 100;
+    public static final int BASE_HP     = 10;
     public static final int BASE_SPEED  = 1;
     public static final int BASE_DAMAGE = 6;
 
