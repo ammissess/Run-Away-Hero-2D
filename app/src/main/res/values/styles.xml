@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="SpinnerTextWhite" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:textColor">@android:color/white</item>
+    </style>
+
+    <style name="SpinnerPopupTheme" parent="ThemeOverlay.AppCompat.Light">
+        <item name="android:textColor">@android:color/black</item>
+    </style>
+</resources>

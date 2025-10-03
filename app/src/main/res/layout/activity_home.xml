@@ -68,7 +68,7 @@
         android:orientation="horizontal"
         android:padding="24dp">
 
-        <!-- CỘT TRÁI: Title + Start -->
+        <!-- CỘT TRÁI: Title + Level -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -81,12 +81,40 @@
                 android:id="@+id/home_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="48dp"
+                android:layout_marginBottom="32dp"
                 android:gravity="center"
                 android:text="HOME"
                 android:textColor="@android:color/white"
                 android:textSize="96sp"
                 android:textStyle="bold" />
+
+            <!-- Chọn cấp độ -->
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Chọn cấp độ"
+                android:textColor="#FFFFFF"
+                android:textSize="36sp" />
+
+            <Spinner
+                android:id="@+id/spinner_level"
+                android:layout_width="250dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_spinner_border"
+                android:popupTheme="@style/SpinnerPopupTheme"
+                android:theme="@style/SpinnerTextWhite"/>
+
+        </LinearLayout>
+
+        <!-- CỘT PHẢI: Buttons -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
 
             <!-- Start button -->
             <Button
@@ -110,47 +138,7 @@
                 android:text="RANKING"
                 android:textColor="@android:color/white"
                 android:textSize="18sp" />
-
         </LinearLayout>
 
-        <!-- CỘT PHẢI: Options -->
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
-
-            <!-- Chọn cấp độ -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Chọn cấp độ"
-                android:textColor="#333333"
-                android:textSize="20sp" />
-
-            <Spinner
-                android:id="@+id/spinner_level"
-                android:layout_width="250dp"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                android:background="@drawable/bg_spinner_border" />
-
-            <!-- Chọn nhân vật -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
-                android:text="Chọn nhân vật"
-                android:textColor="#333333"
-                android:textSize="20sp" />
-
-            <Spinner
-                android:id="@+id/spinner_character"
-                android:layout_width="250dp"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_spinner_border" />
-        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

@@ -21,14 +21,20 @@ public class ScoreManager {
         public int score;
         public long durationMs;
         public long ts;
-        public ScoreEntry(int score, long durationMs, long ts) {
-            this.score = score; this.durationMs = durationMs; this.ts = ts;
+        public String levelName; // NEW: Easy / Normal / Hard (hoặc Level1/2/3)
+
+        public ScoreEntry(int score, long durationMs, long ts, String levelName) {
+            this.score = score;
+            this.durationMs = durationMs;
+            this.ts = ts;
+            this.levelName = levelName;
         }
     }
 
-    public static void saveRun(Context ctx, int score, long durationMs, long ts) {
+    // Save điểm, truyền thêm tên level
+    public static void saveRun(Context ctx, int score, long durationMs, long ts, String levelName) {
         List<ScoreEntry> list = loadAll(ctx);
-        list.add(new ScoreEntry(score, durationMs, ts));
+        list.add(new ScoreEntry(score, durationMs, ts, levelName));
         persist(ctx, list);
     }
 
@@ -38,12 +44,13 @@ public class ScoreManager {
         try {
             JSONArray arr = new JSONArray(json);
             List<ScoreEntry> out = new ArrayList<>();
-            for (int i=0;i<arr.length();i++){
+            for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.getJSONObject(i);
                 out.add(new ScoreEntry(
-                        o.optInt("score",0),
-                        o.optLong("durationMs",0),
-                        o.optLong("ts",0)
+                        o.optInt("score", 0),
+                        o.optLong("durationMs", 0),
+                        o.optLong("ts", 0),
+                        o.optString("levelName", "Level1") // default
                 ));
             }
             return out;
@@ -55,11 +62,12 @@ public class ScoreManager {
     private static void persist(Context ctx, List<ScoreEntry> list) {
         JSONArray arr = new JSONArray();
         try {
-            for (ScoreEntry s: list) {
+            for (ScoreEntry s : list) {
                 JSONObject o = new JSONObject();
                 o.put("score", s.score);
                 o.put("durationMs", s.durationMs);
                 o.put("ts", s.ts);
+                o.put("levelName", s.levelName);
                 arr.put(o);
             }
         } catch (Exception ignored) {}
@@ -67,10 +75,10 @@ public class ScoreManager {
                 .edit().putString(KEY, arr.toString()).apply();
     }
 
-    /** Sắp xếp: điểm ↓; nếu bằng điểm → thời gian ↑ (ít hơn đứng trước); nếu còn bằng → ts ↓ (mới trước) */
+    /** Sắp xếp: điểm ↓; nếu bằng điểm → thời gian ↑; nếu còn bằng → ts ↓ */
     public static List<ScoreEntry> sorted(Context ctx) {
         List<ScoreEntry> list = loadAll(ctx);
-        Collections.sort(list, (a,b) -> {
+        Collections.sort(list, (a, b) -> {
             if (b.score != a.score) return Integer.compare(b.score, a.score);
             if (a.durationMs != b.durationMs) return Long.compare(a.durationMs, b.durationMs);
             return Long.compare(b.ts, a.ts);
@@ -90,4 +98,3 @@ public class ScoreManager {
         return DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(d);
     }
 }
-

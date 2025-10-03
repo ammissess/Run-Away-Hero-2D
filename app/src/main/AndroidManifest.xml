@@ -34,6 +34,11 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <activity android:name=".view.Level2Activity"
+            android:exported="false" />
+
+        <activity android:name=".view.Level3Activity"
+            android:exported="false" />
         <activity
             android:name=".view.GameOverActivity"
             android:exported="false"
@@ -42,7 +47,6 @@
         <activity android:name=".view.HighScoreActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape"/>
-
 
     </application>
 

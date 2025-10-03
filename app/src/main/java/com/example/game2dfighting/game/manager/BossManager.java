@@ -163,7 +163,6 @@ public class BossManager {
         if (bossHp == 0) {
             if (boss.getState() != Boss.State.DIE) {
                 try { boss.onDie(); } catch (Throwable ignore) {}
-                // ❌ không notify ở đây
             }
         } else if (bossHp < oldHp) {
             try { boss.onHurt(); } catch (Throwable ignore) {}

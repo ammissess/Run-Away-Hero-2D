@@ -26,6 +26,11 @@ public class PlayerHudRenderer {
     private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint number = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    // === NEW: LV & EXP Paints ===
+    private final Paint levelText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint expBg = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint expFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+
     // === Fire button ===
     private Rect   fireBtnRect;
     private float  fireBtnRadiusPx;
@@ -65,6 +70,15 @@ public class PlayerHudRenderer {
         number.setTextSize(dp(14));
         number.setShadowLayer(4f, 0f, 0f, Color.BLACK);
         number.setTextAlign(Paint.Align.LEFT);
+
+        // NEW: LV & EXP style
+        levelText.setColor(Color.WHITE);
+        levelText.setTextSize(dp(18));
+        levelText.setFakeBoldText(true);
+        levelText.setShadowLayer(4f, 0f, 0f, Color.BLACK);
+
+        expBg.setColor(Color.argb(140, 60, 60, 60));
+        expFill.setColor(Color.rgb(80, 200, 255)); // xanh EXP
     }
 
     public void draw(Canvas c, Player p, int screenW, int screenH) {
@@ -91,17 +105,26 @@ public class PlayerHudRenderer {
         // Giữ nguyên phần lấp đầy thanh dựa trên HP thật (không vượt quá 100%)
         drawBar(c, "HP", x, y, barW, barH, hpRatio, hp, displayHp, p.getMaxHp());
 
-
         // EN
         y += barH + spacing;
         float enRatio = clamp01(p.getEnergy() / (float) p.getMaxEnergy());
-        drawBar(c, "EN", x, y, barW, barH, enRatio, en, p.getEnergy(), p.getMaxEnergy());
+        drawBar(c, "MP", x, y, barW, barH, enRatio, en, p.getEnergy(), p.getMaxEnergy());
 
+        // ===== NEW: LV + EXP =====
+        y += barH + spacing; // khoảng cách dưới cùng 3 thanh
+        // LV text
+        c.drawText("LV " + p.getLevel(), x, y + dp(16), levelText);
 
-        // MP
-        y += barH + spacing;
-        float mpRatio = clamp01(p.getMana() / (float) p.getMaxMana());
-        drawBar(c, "MP", x, y, barW, barH, mpRatio, mp, p.getMana(), p.getMaxMana());
+        // Thanh EXP (mỏng)
+        float expProgress = p.getExpProgress(); // 0..1
+        float expTop = y + dp(22);
+        float expH = dp(8);
+        // nền
+        c.drawRect(x, expTop, x + barW, expTop + expH, expBg);
+        // fill
+        c.drawRect(x, expTop, x + barW * clamp01(expProgress), expTop + expH, expFill);
+        // viền
+        c.drawRect(x, expTop, x + barW, expTop + expH, outline);
     }
 
     private void drawBar(Canvas c, String name, float x, float y, float w, float h,

@@ -25,8 +25,9 @@ import java.util.List;
 
 public class HighScoreActivity extends AppCompatActivity {
     private MediaPlayer mediaPlayer;
+    private RecyclerView rvL1, rvL2, rvL3;
 
-    // ====== CLOUD BANDS (parallax) ======
+    // Clouds (parallax)
     private static class Band {
         ImageView a, b;
         float speedPxPerSec;
@@ -36,66 +37,59 @@ public class HighScoreActivity extends AppCompatActivity {
     private boolean running = false, loopPosted = false;
     private long lastNs = 0L;
 
-    private final Runnable cloudLoop = new Runnable() {
-        @Override public void run() {
-            if (!running) { loopPosted = false; return; }
-
-            long now = System.nanoTime();
-            float dt = (now - lastNs) / 1_000_000_000f;
-            lastNs = now;
-
-            for (Band band : bands) {
-                if (!band.initialized) continue;
-
-                float dx = band.speedPxPerSec * dt; // trái -> phải
-                band.a.setX(band.a.getX() + dx);
-                band.b.setX(band.b.getX() + dx);
-
-                float w = band.a.getWidth();
-                if (band.a.getX() >= w) band.a.setX(band.b.getX() - w);
-                if (band.b.getX() >= w) band.b.setX(band.a.getX() - w);
-            }
-            bands.get(0).a.postOnAnimation(this);
-        }
-    };
-
-    @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_high_score);
 
-        // ====== RecyclerView top 6 scores ======
-        RecyclerView rv = findViewById(R.id.rvScores);
-        rv.setLayoutManager(new LinearLayoutManager(this));
-        List<ScoreManager.ScoreEntry> list = ScoreManager.sorted(this);
-        if (list.size() > 6) {
-            list = list.subList(0, 6);  // chỉ lấy 6 phần tử đầu tiên
-        }
-        rv.setAdapter(new ScoreAdapter(list));
+        rvL1 = findViewById(R.id.rvScoresL1);
+        rvL2 = findViewById(R.id.rvScoresL2);
+        rvL3 = findViewById(R.id.rvScoresL3);
 
-        // ====== Nút Back ======
+        setupRecycler(rvL1);
+        setupRecycler(rvL2);
+        setupRecycler(rvL3);
+
+        List<ScoreManager.ScoreEntry> all = ScoreManager.sorted(this);
+        List<ScoreManager.ScoreEntry> l1 = new ArrayList<>();
+        List<ScoreManager.ScoreEntry> l2 = new ArrayList<>();
+        List<ScoreManager.ScoreEntry> l3 = new ArrayList<>();
+
+        for (ScoreManager.ScoreEntry s : all) {
+            if (s.levelName.equalsIgnoreCase("Level1") || s.levelName.equalsIgnoreCase("Easy")) {
+                l1.add(s);
+            } else if (s.levelName.equalsIgnoreCase("Level2") || s.levelName.equalsIgnoreCase("Normal")) {
+                l2.add(s);
+            } else if (s.levelName.equalsIgnoreCase("Level3") || s.levelName.equalsIgnoreCase("Hard")) {
+                l3.add(s);
+            }
+        }
+
+        rvL1.setAdapter(new ScoreAdapter(topN(l1, 6)));
+        rvL2.setAdapter(new ScoreAdapter(topN(l2, 6)));
+        rvL3.setAdapter(new ScoreAdapter(topN(l3, 6)));
+
         Button btnBack = findViewById(R.id.btnBackHome);
         btnBack.setOnClickListener(v -> {
-            Intent i = new Intent(this, com.example.game2dfighting.view.HomeActivity.class);
+            Intent i = new Intent(this, HomeActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(i);
             finish();
         });
 
-        // ===== Nhạc nền =====
         mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_highscore);
         mediaPlayer.setLooping(true);
-        mediaPlayer.setVolume(0f, 0f); // sẽ fade-in trong onResume()
+        mediaPlayer.setVolume(0f, 0f);
 
-
-        // ====== Cloud bands setup (giống HomeActivity) ======
-        addBand(R.id.clouds_far_1,  R.id.clouds_far_2,  dp(20));  // xa: chậm
-        addBand(R.id.clouds_mid_1,  R.id.clouds_mid_2,  dp(60));  // vừa
-        addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));  // gần: nhanh
+        addBand(R.id.clouds_far_1, R.id.clouds_far_2, dp(20));
+        addBand(R.id.clouds_mid_1, R.id.clouds_mid_2, dp(60));
+        addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));
 
         for (Band band : bands) {
             band.a.getViewTreeObserver().addOnGlobalLayoutListener(
                     new ViewTreeObserver.OnGlobalLayoutListener() {
-                        @Override public void onGlobalLayout() {
+                        @Override
+                        public void onGlobalLayout() {
                             band.a.getViewTreeObserver().removeOnGlobalLayoutListener(this);
                             float w = band.a.getWidth();
                             band.a.setX(0f);
@@ -107,7 +101,17 @@ public class HighScoreActivity extends AppCompatActivity {
         }
     }
 
-    // ====== Helper methods ======
+    private void setupRecycler(RecyclerView rv) {
+        rv.setLayoutManager(new LinearLayoutManager(this));
+        rv.setHasFixedSize(true);
+    }
+
+    private static List<ScoreManager.ScoreEntry> topN(List<ScoreManager.ScoreEntry> src, int n) {
+        if (src.size() <= n) return src;
+        return new ArrayList<>(src.subList(0, n));
+    }
+
+    // Clouds helpers
     private void addBand(int idA, int idB, float speed) {
         Band band = new Band();
         band.a = findViewById(idA);
@@ -120,44 +124,25 @@ public class HighScoreActivity extends AppCompatActivity {
         boolean anyReady = false;
         for (Band b : bands) if (b.initialized) { anyReady = true; break; }
         if (!anyReady) return;
-
         running = true;
         if (!loopPosted) {
             lastNs = System.nanoTime();
-            bands.get(0).a.postOnAnimation(cloudLoop);
+            bands.get(0).a.postOnAnimation(() -> {});
             loopPosted = true;
         }
     }
 
-    private void stopClouds() { running = false; }
-
-    private float dp(float v) {
-        return TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
-    }
-
     @Override protected void onResume() {
         super.onResume();
-        startClouds();
-
-        if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
-            mediaPlayer.start();
-            fadeIn(mediaPlayer, 600); // 0.6s fade-in, chỉnh tùy ý
-        }
+        if (mediaPlayer != null && !mediaPlayer.isPlaying()) mediaPlayer.start();
     }
 
     @Override protected void onPause() {
-        stopClouds();
-        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
-        }
+        if (mediaPlayer != null && mediaPlayer.isPlaying()) mediaPlayer.pause();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
-        for (Band b : bands) if (b.a != null) b.a.removeCallbacks(cloudLoop);
-        loopPosted = false;
-
         if (mediaPlayer != null) {
             mediaPlayer.release();
             mediaPlayer = null;
@@ -165,11 +150,9 @@ public class HighScoreActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-
-    // ====== RecyclerView Adapter ======
+    // RecyclerView Adapter
     static class ScoreAdapter extends RecyclerView.Adapter<ScoreAdapter.VH> {
         private final List<ScoreManager.ScoreEntry> data;
-
         ScoreAdapter(List<ScoreManager.ScoreEntry> data) { this.data = data; }
 
         static class VH extends RecyclerView.ViewHolder {
@@ -178,8 +161,8 @@ public class HighScoreActivity extends AppCompatActivity {
                 super(v);
                 tvRank = v.findViewById(R.id.tvRank);
                 tvScore = v.findViewById(R.id.tvScore);
-                tvTime  = v.findViewById(R.id.tvTime);
-                tvDate  = v.findViewById(R.id.tvDate);
+                tvTime = v.findViewById(R.id.tvTime);
+                tvDate = v.findViewById(R.id.tvDate);
             }
         }
 
@@ -199,20 +182,8 @@ public class HighScoreActivity extends AppCompatActivity {
         @Override public int getItemCount() { return data.size(); }
     }
 
-    // Fade-in volume
-    private void fadeIn(MediaPlayer mp, int durationMs) {
-        final int steps = 20;
-        final float delta = 1.0f / steps;
-        final int stepDelay = Math.max(10, durationMs / steps);
-
-        mp.setVolume(0f, 0f);
-        final android.os.Handler h = new android.os.Handler();
-        for (int i = 1; i <= steps; i++) {
-            final float vol = delta * i;
-            h.postDelayed(() -> {
-                if (mp != null && mp.isPlaying()) mp.setVolume(vol, vol);
-            }, (long) i * stepDelay);
-        }
+    private float dp(float v) {
+        return TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
     }
-
 }

@@ -20,9 +20,9 @@ import java.util.List;
 
 public class HomeActivity extends Activity {
     public static final String EXTRA_LEVEL = "level";
-    public static final String EXTRA_CHARACTER = "character";
+    // public static final String EXTRA_CHARACTER = "character"; // <-- BỎ nếu không dùng nữa
 
-    private Spinner levelSpinner, characterSpinner;
+    private Spinner levelSpinner; // <-- chỉ còn level
 
     // ====== CLOUD BANDS (parallax) ======
     private static class Band {
@@ -73,50 +73,57 @@ public class HomeActivity extends Activity {
 
         setContentView(R.layout.activity_home);
 
-        // Nhạc nền: KHÔNG start ở đây để tránh “rè” lúc mới vào
+        // Nhạc nền
         mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_home);
         mediaPlayer.setLooping(true);
-        mediaPlayer.setVolume(0f, 0f); // sẽ fade-in trong onResume()
+        mediaPlayer.setVolume(0f, 0f);
 
         // UI
         levelSpinner = findViewById(R.id.spinner_level);
-        characterSpinner = findViewById(R.id.spinner_character);
         Button startBtn = findViewById(R.id.button_start);
 
         levelSpinner.setAdapter(new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"Easy", "Normal", "Hard"}));
 
-        characterSpinner.setAdapter(new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"Warrior", "Mage", "Rogue"}));
-
-        // Khi bấm Start: dừng nhạc để tránh trộn âm ở màn chơi
+        // KHÔNG còn characterSpinner / character
         startBtn.setOnClickListener(v -> {
             if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                 mediaPlayer.pause();
                 mediaPlayer.seekTo(0);
             }
-            Intent i = new Intent(HomeActivity.this, Level1Activity.class);
-            i.putExtra(EXTRA_LEVEL, levelSpinner.getSelectedItem().toString());
-            i.putExtra(EXTRA_CHARACTER, characterSpinner.getSelectedItem().toString());
+
+            String level = levelSpinner.getSelectedItem().toString();
+
+            // Chọn Activity theo độ khó
+            Class<?> activityClass;
+            if ("Easy".equalsIgnoreCase(level)) {
+                activityClass = Level1Activity.class;
+            } else if ("Normal".equalsIgnoreCase(level)) {
+                activityClass = Level2Activity.class;
+            } else if ("Hard".equalsIgnoreCase(level)) {
+                activityClass = Level3Activity.class;
+            } else {
+                activityClass = Level1Activity.class;
+            }
+
+            Intent i = new Intent(HomeActivity.this, activityClass);
+            i.putExtra(EXTRA_LEVEL, level);
+            // i.putExtra(EXTRA_CHARACTER, character); // <-- BỎ
             startActivity(i);
-            // finish(); // nếu không muốn quay lại Home khi back
         });
 
         Button btnRanking = findViewById(R.id.button_ranking);
         btnRanking.setOnClickListener(v -> {
-            Intent i = new Intent(HomeActivity.this, com.example.game2dfighting.view.HighScoreActivity.class);
+            Intent i = new Intent(HomeActivity.this, HighScoreActivity.class);
             startActivity(i);
         });
 
+        // Parallax clouds
+        addBand(R.id.clouds_far_1,  R.id.clouds_far_2,  dp(20));
+        addBand(R.id.clouds_mid_1,  R.id.clouds_mid_2,  dp(60));
+        addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));
 
-        // Tạo 3 band: FAR, MID, NEAR (gần nhanh nhất)
-        addBand(R.id.clouds_far_1,  R.id.clouds_far_2,  dp(20));  // xa: chậm
-        addBand(R.id.clouds_mid_1,  R.id.clouds_mid_2,  dp(60));  // vừa
-        addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));  // gần: nhanh
-
-        // Đợi layout xong -> đặt vị trí b = width, a = 0 cho từng band
         for (Band band : bands) {
             band.a.getViewTreeObserver().addOnGlobalLayoutListener(
                     new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -126,7 +133,7 @@ public class HomeActivity extends Activity {
                             band.a.setX(0f);
                             band.b.setX(w);
                             band.initialized = true;
-                            startClouds(); // lần đầu vào -> tự chạy
+                            startClouds();
                         }
                     });
         }
@@ -141,7 +148,6 @@ public class HomeActivity extends Activity {
     }
 
     private void startClouds() {
-        // chỉ start khi có ít nhất 1 band init xong
         boolean anyReady = false;
         for (Band b : bands) if (b.initialized) { anyReady = true; break; }
         if (!anyReady) return;
@@ -154,9 +160,7 @@ public class HomeActivity extends Activity {
         }
     }
 
-    private void stopClouds() {
-        running = false;
-    }
+    private void stopClouds() { running = false; }
 
     private float dp(float v) {
         return TypedValue.applyDimension(
@@ -167,16 +171,13 @@ public class HomeActivity extends Activity {
         super.onResume();
         startClouds();
 
-        // Start + fade-in để tránh nhiễu lúc mới phát
         if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
             mediaPlayer.start();
-            fadeIn(mediaPlayer, 600); // 300–800ms tuỳ bạn chỉnh
+            fadeIn(mediaPlayer, 600);
         }
     }
 
-    @Override
-    protected void onPause() {
-        // Dừng mây + dừng nhạc trước khi vào nền
+    @Override protected void onPause() {
         stopClouds();
         if (mediaPlayer != null && mediaPlayer.isPlaying()) {
             mediaPlayer.pause();
@@ -185,11 +186,9 @@ public class HomeActivity extends Activity {
     }
 
     @Override protected void onDestroy() {
-        // Gỡ loop animation
         for (Band b : bands) if (b.a != null) b.a.removeCallbacks(cloudLoop);
         loopPosted = false;
 
-        // Giải phóng MediaPlayer
         if (mediaPlayer != null) {
             mediaPlayer.release();
             mediaPlayer = null;
@@ -197,9 +196,8 @@ public class HomeActivity extends Activity {
         super.onDestroy();
     }
 
-    // Fade-in volume đơn giản, không cần thư viện
     private void fadeIn(MediaPlayer mp, int durationMs) {
-        final int steps = 20; // tăng steps để mượt hơn
+        final int steps = 20;
         final float delta = 1.0f / steps;
         final int stepDelay = Math.max(10, durationMs / steps);
 

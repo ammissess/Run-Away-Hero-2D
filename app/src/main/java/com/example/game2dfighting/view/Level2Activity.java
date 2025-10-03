@@ -17,7 +17,7 @@ import com.example.game2dfighting.R;
 import com.example.game2dfighting.ui.JoystickView;
 import com.example.game2dfighting.view.map.GameView;
 
-public class Level1Activity extends AppCompatActivity {
+public class Level2Activity extends AppCompatActivity {
 
     private GameView gameView;
     private JoystickView joystickView;
@@ -38,55 +38,46 @@ public class Level1Activity extends AppCompatActivity {
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         );
 
+        // Dùng lại layout của Level1 (cùng cấu trúc overlay/btn/joystick)
         setContentView(R.layout.activity_level1);
         FrameLayout root = findViewById(R.id.level1_root);
 
-        // --- GameView (thêm VÀO index 0 để ở dưới cùng) ---
+        // --- GameView (đặt dưới cùng) ---
         gameView = new GameView(this);
         FrameLayout.LayoutParams gvParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         );
         gameView.setLayoutParams(gvParams);
-
-        // QUAN TRỌNG: Add vào index 0 để các view từ XML vẫn ở trên
         root.addView(gameView, 0);
 
-        // Sau root.addView(gameView, 0);
+        // Giao tiếp nhạc nền từ GameView
         gameView.setAudioControl(enabled -> {
             if (bgMusic == null) return;
-
             if (enabled) {
-                // Chỉ phát khi game không pause và user bật music
                 if (!gameView.isPaused() && !bgMusic.isPlaying()) {
                     bgMusic.start();
                     fadeIn(bgMusic, 300);
                 }
             } else {
-                // Tắt ngay khi user tắt music
                 if (bgMusic.isPlaying()) {
                     bgMusic.pause();
                 }
-                // Có thể tua về 0 nếu muốn:
-                // bgMusic.seekTo(0);
             }
         });
 
-        // Gắn tên level cho lưu điểm (Level1/Easy)
-        gameView.setLevelName("Level1"); // hoặc "Easy"
+        // Gắn tên level để lưu điểm vào cột Level2
+        gameView.setLevelName("Level2"); // hoặc "Normal"
 
         // Khi player chết -> GameOver
-    // Trong Level1Activity, sửa listener onGameOver (thêm hide overlay trước finish)
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
-            if (pauseOverlay != null) {
-                pauseOverlay.setVisibility(View.GONE);  // Ẩn overlay pause trước khi chuyển màn
-            }
-            startActivity(new Intent(Level1Activity.this, GameOverActivity.class));
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+            startActivity(new Intent(Level2Activity.this, GameOverActivity.class));
             finish();
         }));
 
-        // --- Joystick (thêm SAU GameView để ở trên) ---
+        // --- Joystick ở trên GameView ---
         joystickView = new JoystickView(this, (x, y) -> {
             if (!gameView.isPaused()) {
                 gameView.setMovingUp(y < -0.2f);
@@ -106,17 +97,16 @@ public class Level1Activity extends AppCompatActivity {
         joystickView.setLayoutParams(jsParams);
         root.addView(joystickView);
 
-        // --- Lấy references từ XML (đã có sẵn trong layout) ---
+        // --- Tham chiếu overlay & nút từ layout ---
         pauseOverlay = findViewById(R.id.pause_overlay);
         btnPause = findViewById(R.id.btn_pause);
         btnResume = findViewById(R.id.btn_resume);
         btnQuit = findViewById(R.id.btn_quit);
         btnHome = findViewById(R.id.btn_home);
 
-        // Đảm bảo overlay ẩn ban đầu
         pauseOverlay.setVisibility(View.GONE);
 
-        // --- Setup listeners ---
+        // Pause
         btnPause.setOnClickListener(v -> {
             if (!gameView.isPaused()) {
                 gameView.setPaused(true);
@@ -125,6 +115,7 @@ public class Level1Activity extends AppCompatActivity {
             }
         });
 
+        // Resume
         btnResume.setOnClickListener(v -> {
             pauseOverlay.setVisibility(View.GONE);
             gameView.setPaused(false);
@@ -134,21 +125,17 @@ public class Level1Activity extends AppCompatActivity {
             }
         });
 
-        btnQuit.setOnClickListener(v -> {
+        // Quit & Home (về Home)
+        View.OnClickListener backHome = v -> {
             stopAndRewindMusic();
-            startActivity(new Intent(Level1Activity.this, HomeActivity.class)
+            startActivity(new Intent(Level2Activity.this, HomeActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
             finish();
-        });
+        };
+        btnQuit.setOnClickListener(backHome);
+        btnHome.setOnClickListener(backHome);
 
-        btnHome.setOnClickListener(v -> {
-            stopAndRewindMusic();
-            startActivity(new Intent(Level1Activity.this, HomeActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            finish();
-        });
-
-        // --- Back gesture ---
+        // Back gesture: lần 1 mở pause, lần 2 (khi đang pause) thoát về Home
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
@@ -158,15 +145,15 @@ public class Level1Activity extends AppCompatActivity {
                     if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
                 } else {
                     stopAndRewindMusic();
-                    startActivity(new Intent(Level1Activity.this, HomeActivity.class)
+                    startActivity(new Intent(Level2Activity.this, HomeActivity.class)
                             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
                     finish();
                 }
             }
         });
 
-        // --- Init music ---
-        bgMusic = MediaPlayer.create(this, R.raw.bg_game_level1);
+        // Nhạc nền (tạm dùng chung track level1 để chắc chắn compile)
+        bgMusic = MediaPlayer.create(this, R.raw.bg_game_level1 /* đổi sang bg_game_level2 nếu có */);
         bgMusic.setLooping(true);
         bgMusic.setVolume(0f, 0f);
     }
@@ -180,14 +167,11 @@ public class Level1Activity extends AppCompatActivity {
         }
     }
 
-    // Trong Level1Activity.onPause(), thêm check để tránh show overlay khi game over
     @Override
     protected void onPause() {
-        if (gameView != null && !gameView.isGameOver() && !gameView.isPaused()) {  // Thêm !gameView.isGameOver()
+        if (gameView != null && !gameView.isGameOver() && !gameView.isPaused()) {
             gameView.setPaused(true);
-            if (pauseOverlay != null) {
-                pauseOverlay.setVisibility(View.VISIBLE);
-            }
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
         }
         if (bgMusic != null && bgMusic.isPlaying()) {
             bgMusic.pause();

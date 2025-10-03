@@ -1,10 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/highscore_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/bg_home">
 
-    <!-- Clouds far -->
+    <!-- ===== FAR CLOUDS (nhỏ, mờ, chạy chậm) ===== -->
     <ImageView
         android:id="@+id/clouds_far_1"
         android:layout_width="match_parent"
@@ -13,7 +14,8 @@
         android:layout_marginTop="16dp"
         android:alpha="0.75"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
+
     <ImageView
         android:id="@+id/clouds_far_2"
         android:layout_width="match_parent"
@@ -22,9 +24,9 @@
         android:layout_marginTop="16dp"
         android:alpha="0.75"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
 
-    <!-- Clouds mid -->
+    <!-- ===== MID CLOUDS ===== -->
     <ImageView
         android:id="@+id/clouds_mid_1"
         android:layout_width="match_parent"
@@ -33,7 +35,8 @@
         android:layout_marginTop="52dp"
         android:alpha="0.88"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
+
     <ImageView
         android:id="@+id/clouds_mid_2"
         android:layout_width="match_parent"
@@ -42,9 +45,9 @@
         android:layout_marginTop="52dp"
         android:alpha="0.88"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
 
-    <!-- Clouds near -->
+    <!-- ===== NEAR CLOUDS ===== -->
     <ImageView
         android:id="@+id/clouds_near_1"
         android:layout_width="match_parent"
@@ -53,7 +56,8 @@
         android:layout_marginTop="88dp"
         android:alpha="1.0"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
+
     <ImageView
         android:id="@+id/clouds_near_2"
         android:layout_width="match_parent"
@@ -62,12 +66,12 @@
         android:layout_marginTop="88dp"
         android:alpha="1.0"
         android:scaleType="fitXY"
-        android:src="@drawable/bg_home_clouds"/>
+        android:src="@drawable/bg_home_clouds" />
 
-    <!-- Content -->
+    <!-- ===== NỘI DUNG CHÍNH ===== -->
     <LinearLayout
         android:orientation="vertical"
-        android:gravity="center"
+        android:gravity="center_horizontal"
         android:padding="24dp"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
@@ -78,26 +82,115 @@
             android:textStyle="bold"
             android:textSize="36sp"
             android:textColor="@android:color/white"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="16dp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvScores"
+        <!-- Hàng chính chứa 3 cột song song -->
+        <LinearLayout
+            android:id="@+id/containerColumns"
+            android:orientation="horizontal"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingTop="12dp"/>
+            android:layout_weight="1">
 
+            <!-- CỘT LEVEL 1 -->
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:paddingEnd="12dp">
+
+                <TextView
+                    android:id="@+id/labelLevel1"
+                    android:text="LEVEL 1"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="#FF33FF"
+                    android:layout_marginBottom="8dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvScoresL1"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"/>
+            </LinearLayout>
+
+            <!-- Vạch dọc ngăn cột -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="#66FFFFFF"/>
+
+            <!-- CỘT LEVEL 2 -->
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp">
+
+                <TextView
+                    android:id="@+id/labelLevel2"
+                    android:text="LEVEL 2"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="#FF33FF"
+                    android:layout_marginBottom="8dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvScoresL2"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"/>
+            </LinearLayout>
+
+            <!-- Vạch dọc ngăn cột -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="#66FFFFFF"/>
+
+            <!-- CỘT LEVEL 3 -->
+            <LinearLayout
+                android:orientation="vertical"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:paddingStart="12dp">
+
+                <TextView
+                    android:id="@+id/labelLevel3"
+                    android:text="LEVEL 3"
+                    android:textStyle="bold"
+                    android:textSize="18sp"
+                    android:textColor="#FF33FF"
+                    android:layout_marginBottom="8dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"/>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvScoresL3"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Nút Back ở dưới cùng -->
         <Button
             android:id="@+id/btnBackHome"
             android:layout_width="200dp"
             android:layout_height="56dp"
-            android:layout_gravity="center"
-            android:backgroundTint="#1976D2"
+            android:layout_marginTop="16dp"
             android:text="BACK HOME"
             android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:layout_marginTop="16dp"/>
+            android:backgroundTint="#1976D2"/>
     </LinearLayout>
 </FrameLayout>

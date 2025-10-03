@@ -105,6 +105,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private final Paint dimPaint = new Paint(); // sơn phủ mờ
     private Bitmap bmpGameOver;                 // ảnh "gameover"
 
+    // === Level name để lưu điểm đúng cột High Score ===
+    private String levelName = "Level1"; // mặc định
+    public void setLevelName(String name) {
+        this.levelName = (name == null || name.isEmpty()) ? "Level1" : name;
+    }
 
     // Khoảng cách đẩy lùi
     private static final float PUSH_BACK_DISTANCE = 100f;  // Pixel đẩy lùi
@@ -373,7 +378,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             if (!bossDefeated && !deathSequence) {
                 // 👉 lấy elapsed TRƯỚC khi pause
                 long elapsed = getElapsedMsAccurate();
-                ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis());
+                ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis(), levelName);
 
                 // rồi mới pause + bật overlay
                 timerPaused = true;
@@ -965,7 +970,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             Rect pointRect = new Rect(p.x - 10, p.y - 10, p.x + 10, p.y + 10);
             if (Rect.intersects(playerRect, pointRect)) {
                 points.remove(i);
-                player.addMana(1);
+
+                if (playerMgr != null) playerMgr.addExp(10);
 
                 // respawn trong playable rect
                 Rect pr = getPlayableRect();
@@ -975,6 +981,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         }
     }
+
 
     // ===== Render =====
     private void render(Canvas canvas) {

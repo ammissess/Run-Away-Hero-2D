@@ -93,7 +93,6 @@ public class PlayerManager {
         }
     }
 
-    /** Thử dùng kỹ năng. Trả về Fireball nếu cast thành công, null nếu không. */
     /** Thử dùng kỹ năng. Trả về projectile (Fireball/IceSpike) nếu cast thành công, null nếu không. */
     public Object tryUseSkill(SkillType type, float targetWorldX, float targetWorldY) {
         if (player == null) return null;
@@ -191,4 +190,18 @@ public class PlayerManager {
         return (cfg != null) ? cfg.cooldownMs : 0L;
     }
 
+    // ===================== NEW: Proxy EXP/Level/Damage =====================
+    public void addExp(int amount) {
+        if (player != null) player.addExp(amount);
+    }
+    public int getLevel() {
+        return (player != null) ? player.getLevel() : 1;
+    }
+    public float getExpProgress() {
+        return (player != null) ? player.getExpProgress() : 0f;
+    }
+    public int getDamage() {
+        return (player != null) ? player.getDamage() : 0;
+    }
+    public Player getPlayer() { return player; }
 }

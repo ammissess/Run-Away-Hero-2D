@@ -40,6 +40,26 @@ public class Player extends GameObject {
     private int maxEnergy = 100;
     private int energy    = 100;
 
+    // ===================== NEW: LEVEL / EXP / DAMAGE =====================
+    // EXP yêu cầu ban đầu = 100; mỗi lần lên level nhân 1.5 và làm tròn lên.
+    private int level = 1;
+    private int exp = 0;
+    private int expToNext = 100;
+
+    // Damage cơ bản của nhân vật (nếu skill/đòn đánh khác đang đọc damage ở nơi khác,
+    // có thể chuyển sang dùng getDamage() này để scale theo level).
+    private int baseDamage = 10;
+
+    // “Base” stats làm mốc để tăng dần mỗi level
+    private int baseMaxHp = maxHp;        // mốc ban đầu = 100
+    private int baseMaxEnergy = maxEnergy; // mốc ban đầu = 100
+
+    // Mức tăng mỗi level (có thể điều chỉnh cho cân bằng game)
+    private int hpPerLevel     = 20;
+    private int dmgPerLevel    = 5;
+    private int energyPerLevel = 10;
+    // =====================================================================
+
     // ==== Sprite gốc (tham chiếu nếu cần) ====
     private int spriteW;
     private int spriteH;
@@ -77,6 +97,9 @@ public class Player extends GameObject {
         this.ctx = ctx;
         loadAnimations();
         setState(State.IDLE);
+        // đồng bộ “base” với giá trị khởi điểm hiện tại
+        this.baseMaxHp = this.maxHp;
+        this.baseMaxEnergy = this.maxEnergy;
     }
 
     //phuong thuc getState
@@ -292,6 +315,51 @@ public class Player extends GameObject {
         return state == State.DIE && System.currentTimeMillis() >= dieEndAtMs;
     }
 
+    // ===================== NEW: LEVEL / EXP API =====================
+
+    /** +EXP; sẽ tự xử lý lên level nếu đủ. */
+    public void addExp(int amount) {
+        if (amount <= 0) return;
+        exp += amount;
+        while (exp >= expToNext) {
+            exp -= expToNext;
+            levelUp();
+        }
+    }
+
+    /** Tăng level: buff chỉ số & tăng mốc EXP level kế tiếp (ceil(1.5x)). */
+    private void levelUp() {
+        level++;
+
+        // Tăng “base” trước
+        baseMaxHp     += hpPerLevel;
+        baseMaxEnergy += energyPerLevel;
+        baseDamage    += dmgPerLevel;
+
+        // Áp vào giá trị đang sử dụng
+        this.maxHp = baseMaxHp;
+        this.hp = Math.min(this.hp + hpPerLevel, this.maxHp); // hồi một phần máu
+        this.maxEnergy = baseMaxEnergy;
+        this.energy = Math.min(this.energy + energyPerLevel, this.maxEnergy);
+
+        // Nếu bạn dùng Mana như Energy chung, có thể muốn tăng maxMana tương tự:
+        // this.maxMana += energyPerLevel / 2; // (tuỳ)
+        // this.mana = Math.min(this.mana + energyPerLevel / 2, this.maxMana);
+
+        // EXP cho level kế tiếp
+        expToNext = (int) Math.ceil(expToNext * 1.5f);
+
+        // TODO(optional): phát hiệu ứng/âm thanh "LEVEL UP!"
+    }
+
+    public int getLevel() { return level; }
+    public int getExp() { return exp; }
+    public int getExpToNext() { return expToNext; }
+    public float getExpProgress() {
+        return expToNext > 0 ? (exp / (float) expToNext) : 0f;
+    }
+    public int getDamage() { return baseDamage; }
+
     // ==== Getter/Setter phụ trợ ====
 
     // HP
@@ -386,6 +454,4 @@ public class Player extends GameObject {
             shield.draw(c, cameraX, cameraY);
         }
     }
-
-
 }
