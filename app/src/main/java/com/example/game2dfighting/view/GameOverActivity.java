@@ -30,10 +30,23 @@ public class GameOverActivity extends AppCompatActivity {
     // Music
     private MediaPlayer mediaPlayer;
 
+    // >>> NEW: tên activity để restart
+    private Class<?> restartActivityClass = Level1Activity.class; // fallback
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game_over);
+
+        // Lấy tên Activity màn vừa thua (nếu có)
+        String restartClassName = getIntent().getStringExtra("restart_activity");
+        if (restartClassName != null && !restartClassName.isEmpty()) {
+            try {
+                restartActivityClass = Class.forName(restartClassName);
+            } catch (ClassNotFoundException ignored) {
+                restartActivityClass = Level1Activity.class;
+            }
+        }
 
         // Buttons
         btnPlayAgain = findViewById(R.id.btn_play_again);
@@ -44,7 +57,10 @@ public class GameOverActivity extends AppCompatActivity {
                 mediaPlayer.pause();
                 mediaPlayer.seekTo(0);
             }
-            Intent intent = new Intent(GameOverActivity.this, Level1Activity.class);
+            // >>> NEW: mở lại đúng màn vừa thua
+            Intent intent = new Intent(GameOverActivity.this, restartActivityClass);
+            // Xoá stack cũ cho sạch sẽ (tuỳ bạn)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             finish();
         });
@@ -54,7 +70,6 @@ public class GameOverActivity extends AppCompatActivity {
             Intent i = new Intent(GameOverActivity.this, com.example.game2dfighting.view.HighScoreActivity.class);
             startActivity(i);
         });
-
 
         btnQuit.setOnClickListener(v -> {
             if (mediaPlayer != null && mediaPlayer.isPlaying()) {
@@ -67,7 +82,7 @@ public class GameOverActivity extends AppCompatActivity {
             finish();
         });
 
-        // Clouds (đảm bảo activity_game_over.xml có các id này)
+        // Clouds
         cloudsFar1  = findViewById(R.id.clouds_far_1);
         cloudsFar2  = findViewById(R.id.clouds_far_2);
         cloudsMid1  = findViewById(R.id.clouds_mid_1);
@@ -79,10 +94,10 @@ public class GameOverActivity extends AppCompatActivity {
             cloudsFar1.post(this::startCloudAnimationsIfReady);
         }
 
-        // Nhạc nền (file bg_game_over đặt trong res/raw/)
+        // Nhạc nền
         mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_over);
         mediaPlayer.setLooping(true);
-        mediaPlayer.setVolume(0f, 0f); // bắt đầu với âm lượng 0, fade-in trong onResume
+        mediaPlayer.setVolume(0f, 0f); // fade-in trong onResume
     }
 
     private void startCloudAnimationsIfReady() {
@@ -148,11 +163,9 @@ public class GameOverActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        // Dừng animators
         for (ValueAnimator va : runningAnimators) {
             if (va != null && va.isRunning()) va.pause();
         }
-
         if (mediaPlayer != null && mediaPlayer.isPlaying()) {
             mediaPlayer.pause();
         }
@@ -173,12 +186,10 @@ public class GameOverActivity extends AppCompatActivity {
         }
     }
 
-    // Hàm fade-in để tránh rè lúc đầu
     private void fadeIn(MediaPlayer mp, int durationMs) {
         final int steps = 20;
         final float delta = 1.0f / steps;
         final int stepDelay = Math.max(10, durationMs / steps);
-
         mp.setVolume(0f, 0f);
         final android.os.Handler h = new android.os.Handler();
         for (int i = 1; i <= steps; i++) {

@@ -97,7 +97,9 @@ public class Level3Activity extends AppCompatActivity {
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
-            startActivity(new Intent(Level3Activity.this, GameOverActivity.class));
+            Intent i = new Intent(Level3Activity.this, GameOverActivity.class);
+            i.putExtra("restart_activity", Level3Activity.class.getName());
+            startActivity(i);
             finish();
         }));
 

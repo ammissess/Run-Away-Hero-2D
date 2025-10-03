@@ -82,7 +82,10 @@ public class Level1Activity extends AppCompatActivity {
             if (pauseOverlay != null) {
                 pauseOverlay.setVisibility(View.GONE);  // Ẩn overlay pause trước khi chuyển màn
             }
-            startActivity(new Intent(Level1Activity.this, GameOverActivity.class));
+            // chỗ gọi GameOverActivity
+            Intent i = new Intent(Level1Activity.this, GameOverActivity.class);
+            i.putExtra("restart_activity", Level1Activity.class.getName());
+            startActivity(i);
             finish();
         }));
 
