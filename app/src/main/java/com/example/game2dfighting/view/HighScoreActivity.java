@@ -27,7 +27,7 @@ public class HighScoreActivity extends AppCompatActivity {
     private MediaPlayer mediaPlayer;
     private RecyclerView rvL1, rvL2, rvL3;
 
-    // Clouds (parallax)
+    // ====== CLOUD BANDS (parallax) ======
     private static class Band {
         ImageView a, b;
         float speedPxPerSec;
@@ -36,6 +36,30 @@ public class HighScoreActivity extends AppCompatActivity {
     private final List<Band> bands = new ArrayList<>();
     private boolean running = false, loopPosted = false;
     private long lastNs = 0L;
+
+    // Vòng lặp cập nhật mây ~60fps (giống HomeActivity)
+    private final Runnable cloudLoop = new Runnable() {
+        @Override public void run() {
+            if (!running) { loopPosted = false; return; }
+
+            long now = System.nanoTime();
+            float dt = (now - lastNs) / 1_000_000_000f;
+            lastNs = now;
+
+            for (Band band : bands) {
+                if (!band.initialized) continue;
+
+                float dx = band.speedPxPerSec * dt; // trái -> phải
+                band.a.setX(band.a.getX() + dx);
+                band.b.setX(band.b.getX() + dx);
+
+                float w = band.a.getWidth();
+                if (band.a.getX() >= w) band.a.setX(band.b.getX() - w);
+                if (band.b.getX() >= w) band.b.setX(band.a.getX() - w);
+            }
+            bands.get(0).a.postOnAnimation(this);
+        }
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -77,12 +101,15 @@ public class HighScoreActivity extends AppCompatActivity {
             finish();
         });
 
+        // ==== Nhạc nền (bật loop + fade-in thay vì để 0f) ====
+        // Đổi sang bg_game_home nếu bạn chưa có file bg_game_highscore
         mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_highscore);
         mediaPlayer.setLooping(true);
-        mediaPlayer.setVolume(0f, 0f);
+        mediaPlayer.setVolume(0f, 0f); // sẽ fade lên ở onResume
 
-        addBand(R.id.clouds_far_1, R.id.clouds_far_2, dp(20));
-        addBand(R.id.clouds_mid_1, R.id.clouds_mid_2, dp(60));
+        // ==== Parallax clouds ====
+        addBand(R.id.clouds_far_1,  R.id.clouds_far_2,  dp(20));
+        addBand(R.id.clouds_mid_1,  R.id.clouds_mid_2,  dp(60));
         addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));
 
         for (Band band : bands) {
@@ -95,7 +122,7 @@ public class HighScoreActivity extends AppCompatActivity {
                             band.a.setX(0f);
                             band.b.setX(w);
                             band.initialized = true;
-                            startClouds();
+                            startClouds(); // sẽ post cloudLoop
                         }
                     });
         }
@@ -127,22 +154,35 @@ public class HighScoreActivity extends AppCompatActivity {
         running = true;
         if (!loopPosted) {
             lastNs = System.nanoTime();
-            bands.get(0).a.postOnAnimation(() -> {});
+            bands.get(0).a.postOnAnimation(cloudLoop); // <-- chạy loop thật
             loopPosted = true;
         }
     }
 
+    private void stopClouds() { running = false; }
+
     @Override protected void onResume() {
         super.onResume();
-        if (mediaPlayer != null && !mediaPlayer.isPlaying()) mediaPlayer.start();
+        startClouds();
+        if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+            mediaPlayer.start();
+            fadeIn(mediaPlayer, 600); // tăng volume dần
+        }
     }
 
     @Override protected void onPause() {
+        stopClouds();
         if (mediaPlayer != null && mediaPlayer.isPlaying()) mediaPlayer.pause();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
+        // gỡ callback để tránh rò rỉ
+        if (!bands.isEmpty() && bands.get(0).a != null) {
+            bands.get(0).a.removeCallbacks(cloudLoop);
+        }
+        loopPosted = false;
+
         if (mediaPlayer != null) {
             mediaPlayer.release();
             mediaPlayer = null;
@@ -185,5 +225,20 @@ public class HighScoreActivity extends AppCompatActivity {
     private float dp(float v) {
         return TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
+    }
+
+    private void fadeIn(MediaPlayer mp, int durationMs) {
+        final int steps = 20;
+        final float delta = 1.0f / steps;
+        final int stepDelay = Math.max(10, durationMs / steps);
+
+        mp.setVolume(0f, 0f);
+        final android.os.Handler h = new android.os.Handler();
+        for (int i = 1; i <= steps; i++) {
+            final float vol = delta * i; // 0 -> 1
+            h.postDelayed(() -> {
+                if (mp != null && mp.isPlaying()) mp.setVolume(vol, vol);
+            }, (long) i * stepDelay);
+        }
     }
 }
