@@ -25,8 +25,12 @@ public class Level1Activity extends AppCompatActivity {
     private View pauseOverlay;
     private ImageButton btnPause;
     private Button btnResume, btnQuit, btnHome;
-
     private MediaPlayer bgMusic;
+
+    // NEW: giữ thông tin để chuyển màn
+    private int difficulty = 1;            // lấy từ Home
+    private int playerLevelCurrent = 1;    // cấp hiện tại của nhân vật
+    private int playerLevelAtEntry = 1;    // snapshot khi vào level
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,13 +45,22 @@ public class Level1Activity extends AppCompatActivity {
         setContentView(R.layout.activity_level1);
         FrameLayout root = findViewById(R.id.level1_root);
 
+        // NEW: nhận extras ngay sau setContentView
+        Intent in = getIntent();
+        difficulty = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
+        playerLevelCurrent = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, 1);
+        playerLevelAtEntry = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelCurrent);
+
         // --- GameView (thêm VÀO index 0 để ở dưới cùng) ---
         gameView = new GameView(this);
+        gameView.setIslandResId(R.drawable.bg_map_island);
+        gameView.setStatMultipliersForLevel(1);
         FrameLayout.LayoutParams gvParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
         );
         gameView.setLayoutParams(gvParams);
+        gameView.setStartingPlayerLevel(playerLevelCurrent);
 
         // QUAN TRỌNG: Add vào index 0 để các view từ XML vẫn ở trên
         root.addView(gameView, 0);
@@ -74,6 +87,26 @@ public class Level1Activity extends AppCompatActivity {
 
         // Gắn tên level cho lưu điểm (Level1/Easy)
         gameView.setLevelName("Level1"); // hoặc "Easy"
+
+        // NEW: đăng ký onWin để mở LevelClearActivity
+        gameView.setOnWinListener(() -> runOnUiThread(() -> {
+            stopAndRewindMusic();
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            // >>> LẤY CẤP HIỆN TẠI TỪ GAMEVIEW (sau khi đã cộng EXP/level up)
+            playerLevelCurrent = gameView.getCurrentPlayerLevel();
+
+            Intent it = new Intent(Level1Activity.this, LevelClearActivity.class);
+            it.putExtra(LevelClearActivity.EXTRA_FROM_LEVEL, 1);
+            it.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrent);
+            it.putExtra(LevelClearActivity.EXTRA_IS_LAST_LEVEL, false);
+            // tránh back về nhầm
+            it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(it);
+            finish();
+        }));
 
         // Khi player chết -> GameOver
     // Trong Level1Activity, sửa listener onGameOver (thêm hide overlay trước finish)

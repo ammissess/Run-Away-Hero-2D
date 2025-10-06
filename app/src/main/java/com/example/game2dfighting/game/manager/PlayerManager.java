@@ -194,9 +194,6 @@ public class PlayerManager {
     public void addExp(int amount) {
         if (player != null) player.addExp(amount);
     }
-    public int getLevel() {
-        return (player != null) ? player.getLevel() : 1;
-    }
     public float getExpProgress() {
         return (player != null) ? player.getExpProgress() : 0f;
     }
@@ -204,4 +201,22 @@ public class PlayerManager {
         return (player != null) ? player.getDamage() : 0;
     }
     public Player getPlayer() { return player; }
+
+    // ===================== NEW: Level init =====================
+    public void setLevel(int lvl) {
+        if (player == null) return;
+        int target = Math.max(1, lvl);
+        player.setLevel(target);      // sẽ gọi recalcStatsForLevel() bên trong
+        tryRecalcStats();             // ok nếu muốn chắc chắn
+    }
+
+    public int getLevel() {
+        return (player != null) ? player.getLevel() : 1;  // Player cần có getLevel()
+    }
+
+    private void tryRecalcStats() {
+        try { player.recalcStatsForLevel(); } catch (Throwable ignore) {}
+    }
+
+
 }

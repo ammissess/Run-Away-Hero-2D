@@ -88,6 +88,14 @@ public class Player extends GameObject {
         return !isDead() && System.currentTimeMillis() >= hardStunUntilMs;
     }
 
+    private static final int FIREBALL_BASE_DMG = 15;
+    private static final int ICESPIKE_BASE_DMG = 10;
+
+    private int getPerLevelSkillBonus() {
+        // level 1 -> +0, level 2 -> +2, level 3 -> +4, ...
+        return Math.max(0, (level - 1) * 2);
+    }
+
     // Trung tâm (để GameView dùng camera follow)
     public float centerX() { return x + w/2f; }
     public float centerY() { return y + h/2f; }
@@ -226,20 +234,18 @@ public class Player extends GameObject {
         // KHÔNG khóa di chuyển
     }
 
-    public Fireball shootFireballToward(float targetX, float targetY, int mapW, int mapH, Context ctx){
-        // Tâm người chơi
-        float px = this.x + this.w/2f;
-        float py = this.y + this.h/2f;
+    public Fireball shootFireballToward(float targetX, float targetY, int mapW, int mapH, Context ctx) {
+        float px = this.x + this.w / 2f;
+        float py = this.y + this.h / 2f;
 
-        // Hướng bay (chuẩn hoá)
         float dx = targetX - px;
         float dy = targetY - py;
-        float len = (float)Math.sqrt(dx*dx + dy*dy);
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
         if (len < 1f) len = 1f;
-        dx /= len; dy /= len;
+        dx /= len;
+        dy /= len;
 
-        // Tốc độ & vị trí nòng súng
-        float speed = 300f; // px/s — tuỳ bạn
+        float speed = 300f;
         float vx = dx * speed;
         float vy = dy * speed;
 
@@ -247,24 +253,28 @@ public class Player extends GameObject {
         float sx = px + dx * muzzle;
         float sy = py + dy * muzzle;
 
-        return new Fireball(sx, sy, vx, vy, mapW, mapH, ctx);
+        Fireball fb = new Fireball(sx, sy, vx, vy, mapW, mapH, ctx);
+        fb.damage = FIREBALL_BASE_DMG + getPerLevelSkillBonus(); // 🔥 +2 mỗi cấp
+        return fb;
     }
+
 
     public IceSpike shootIceSpikeToward(float tx, float ty, int mapW, int mapH, Context ctx) {
         float px = centerX();
         float py = centerY();
         float dx = tx - px;
         float dy = ty - py;
-        float len = (float)Math.sqrt(dx*dx + dy*dy);
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
         if (len == 0) return null;
 
-        float speed = 800f; // tốc độ bay
+        float speed = 800f;
         float vx = dx / len * speed;
         float vy = dy / len * speed;
 
-        return new IceSpike(px, py, vx, vy, mapW, mapH, ctx);
+        IceSpike spike = new IceSpike(px, py, vx, vy, mapW, mapH, ctx);
+        spike.damage = ICESPIKE_BASE_DMG + getPerLevelSkillBonus(); // ❄️ +2 mỗi cấp
+        return spike;
     }
-
 
     /**
      * Player nhận sát thương. Trả về true nếu chết (để GameView xử lý).
@@ -454,4 +464,40 @@ public class Player extends GameObject {
             shield.draw(c, cameraX, cameraY);
         }
     }
+
+    // Player.java
+    public void setLevel(int lvl) {
+        this.level = Math.max(1, lvl);
+        recalcStatsForLevel();
+    }
+
+    /** Gọi khi setLevel hoặc khi cần sync chỉ số theo level hiện tại */
+    public void recalcStatsForLevel() {
+        // Tính lại base theo level (dựa trên mốc level 1)
+        baseMaxHp     = 100 + hpPerLevel    * (level - 1);
+        baseMaxEnergy = 100 + energyPerLevel* (level - 1);
+        baseDamage    = 10  + dmgPerLevel   * (level - 1);
+
+        // Áp sang chỉ số đang dùng
+        int oldMaxHp = maxHp;
+        int oldHp    = hp;
+
+        maxHp = baseMaxHp;
+        // Giữ tỉ lệ HP cũ (để qua màn không “hồi full” 100%)
+        if (oldMaxHp > 0) {
+            hp = Math.min(maxHp, Math.round(oldHp * (maxHp / (float) oldMaxHp)));
+        } else {
+            hp = maxHp; // fallback
+        }
+
+        maxEnergy = baseMaxEnergy;
+        energy    = Math.min(energy, maxEnergy);
+
+        // Nếu bạn muốn scale thêm mana/speed thì thêm vào đây
+        // maxMana = ...
+        // speed   = ...
+
+        // Nếu có HUD nào đọc từ getDamage(), nó đã lấy theo baseDamage rồi
+    }
+
 }

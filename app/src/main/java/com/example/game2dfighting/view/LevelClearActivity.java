@@ -1,30 +1,37 @@
 package com.example.game2dfighting.view;
 
-import android.app.Activity;
 import android.content.Intent;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewTreeObserver;
-import android.view.WindowManager;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
-import android.widget.Spinner;
-import android.media.MediaPlayer;
+import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.game2dfighting.R;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class HomeActivity extends Activity {
-    public static final String EXTRA_LEVEL = "level";
-    // public static final String EXTRA_CHARACTER = "character"; // <-- BỎ nếu không dùng nữa
+public class LevelClearActivity extends AppCompatActivity {
 
-    private Spinner levelSpinner; // <-- chỉ còn level
+    public static final String EXTRA_FROM_LEVEL = "from_level";          // 1/2/3
+    public static final String EXTRA_DIFFICULTY = "difficulty";           // cấp độ chọn ở Home
+    public static final String EXTRA_PLAYER_LEVEL_AT_ENTRY = "player_level_at_entry";
+    public static final String EXTRA_PLAYER_LEVEL_CURRENT = "player_level_current";
+    public static final String EXTRA_IS_LAST_LEVEL = "is_last_level";     // true nếu đang ở level 3
 
-    // ====== CLOUD BANDS (parallax) ======
+    private int fromLevel;
+    private int difficulty;
+    private int entryPlayerLevel;
+    private int currentPlayerLevel;
+    private boolean isLastLevel;
+
+    // ====== PARALLAX CLOUDS (clone từ Home) ======
     private static class Band {
         ImageView a, b;
         float speedPxPerSec;
@@ -33,8 +40,6 @@ public class HomeActivity extends Activity {
     private final List<Band> bands = new ArrayList<>();
     private boolean running = false, loopPosted = false;
     private long lastNs = 0L;
-
-    private MediaPlayer mediaPlayer;
 
     private final Runnable cloudLoop = new Runnable() {
         @Override public void run() {
@@ -60,77 +65,39 @@ public class HomeActivity extends Activity {
         }
     };
 
+    // ====== MUSIC ======
+    private MediaPlayer mediaPlayer;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Fullscreen + immersive
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        | View.SYSTEM_UI_FLAG_FULLSCREEN
-                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        setContentView(R.layout.activity_level_clear);
 
-        setContentView(R.layout.activity_home);
+        Intent i = getIntent();
+        fromLevel = i.getIntExtra(EXTRA_FROM_LEVEL, 1);
+        difficulty = i.getIntExtra(EXTRA_DIFFICULTY, 1);
+        entryPlayerLevel = i.getIntExtra(EXTRA_PLAYER_LEVEL_AT_ENTRY, 1);
+        currentPlayerLevel = i.getIntExtra(EXTRA_PLAYER_LEVEL_CURRENT, entryPlayerLevel);
+        isLastLevel = i.getBooleanExtra(EXTRA_IS_LAST_LEVEL, false);
 
-        // Nhạc nền
-        mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_home);
+        TextView tv = findViewById(R.id.tvTitle);
+        Button btnNext = findViewById(R.id.btnNextLevel);
+        Button btnReplay = findViewById(R.id.btnReplay);
+        Button btnRanking = findViewById(R.id.btnRanking);
+
+        // ====== Nhạc nền (có thể dùng riêng file bg_level_clear.mp3 nếu muốn) ======
+        mediaPlayer = MediaPlayer.create(this, R.raw.bg_game_levelclear);
         mediaPlayer.setLooping(true);
         mediaPlayer.setVolume(0f, 0f);
 
-        // UI
-        levelSpinner = findViewById(R.id.spinner_level);
-        Button startBtn = findViewById(R.id.button_start);
-
-        levelSpinner.setAdapter(new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"Easy", "Normal", "Hard"}));
-
-        startBtn.setOnClickListener(v -> {
-            if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-                mediaPlayer.pause();
-                mediaPlayer.seekTo(0);
-            }
-
-            String level = levelSpinner.getSelectedItem().toString();
-
-            Class<?> activityClass;
-            int difficulty;
-            switch (level) {
-                case "Normal":
-                    activityClass = Level2Activity.class;
-                    difficulty = 2;
-                    break;
-                case "Hard":
-                    activityClass = Level3Activity.class;
-                    difficulty = 3;
-                    break;
-                default:
-                    activityClass = Level1Activity.class;
-                    difficulty = 1;
-                    break;
-            }
-
-            Intent i = new Intent(HomeActivity.this, activityClass);
-            i.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
-            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, 1);
-            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, 1);
-            startActivity(i);
-        });
-
-        Button btnRanking = findViewById(R.id.button_ranking);
-        btnRanking.setOnClickListener(v -> {
-            Intent i = new Intent(HomeActivity.this, HighScoreActivity.class);
-            i.putExtra(HighScoreActivity.EXTRA_FROM, "home");
-            startActivity(i);
-        });
-
-        // Parallax clouds
+        // ====== Parallax clouds: map id + speed giống Home ======
         addBand(R.id.clouds_far_1,  R.id.clouds_far_2,  dp(20));
         addBand(R.id.clouds_mid_1,  R.id.clouds_mid_2,  dp(60));
         addBand(R.id.clouds_near_1, R.id.clouds_near_2, dp(90));
 
+        // Khởi tạo vị trí hai tấm mây liền nhau
         for (Band band : bands) {
+            if (band.a == null || band.b == null) continue;
             band.a.getViewTreeObserver().addOnGlobalLayoutListener(
                     new ViewTreeObserver.OnGlobalLayoutListener() {
                         @Override public void onGlobalLayout() {
@@ -143,6 +110,35 @@ public class HomeActivity extends Activity {
                         }
                     });
         }
+
+        // ====== UI logic sẵn có ======
+        if (isLastLevel) {
+            tv.setText("GAME COMPLETED!");
+            btnNext.setVisibility(View.GONE);
+        } else {
+            btnNext.setVisibility(View.VISIBLE);
+        }
+
+        btnReplay.setOnClickListener(v -> {
+            Intent replay = openLevel(fromLevel, difficulty, entryPlayerLevel, entryPlayerLevel);
+            replay.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(replay);
+            finish();
+        });
+
+        btnNext.setOnClickListener(v -> {
+            int next = Math.min(3, fromLevel + 1);
+            Intent nextLevel = openLevel(next, difficulty, currentPlayerLevel, currentPlayerLevel);
+            nextLevel.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(nextLevel);
+            finish();
+        });
+
+        btnRanking.setOnClickListener(v -> {
+            Intent rank = new Intent(this, HighScoreActivity.class);
+            rank.putExtra(HighScoreActivity.EXTRA_FROM, isLastLevel ? "finalclear" : "levelclear");
+            startActivity(rank);
+        });
     }
 
     private void addBand(int idA, int idB, float speed) {
@@ -217,5 +213,15 @@ public class HomeActivity extends Activity {
         }
     }
 
+    private Intent openLevel(int level, int difficulty, int playerLevel, int entrySnapshotLevel) {
+        Class<?> dest = Level1Activity.class;
+        if (level == 2) dest = Level2Activity.class;
+        else if (level == 3) dest = Level3Activity.class;
 
+        Intent it = new Intent(this, dest);
+        it.putExtra(EXTRA_DIFFICULTY, difficulty);
+        it.putExtra(EXTRA_PLAYER_LEVEL_CURRENT, playerLevel);
+        it.putExtra(EXTRA_PLAYER_LEVEL_AT_ENTRY, entrySnapshotLevel);
+        return it;
+    }
 }

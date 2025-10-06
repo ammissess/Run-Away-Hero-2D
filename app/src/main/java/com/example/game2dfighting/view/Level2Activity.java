@@ -29,6 +29,11 @@ public class Level2Activity extends AppCompatActivity {
 
     private MediaPlayer bgMusic;
 
+    // NEW
+    private int difficulty = 1;
+    private int playerLevelCurrent = 1;
+    private int playerLevelAtEntry = 1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -43,8 +48,16 @@ public class Level2Activity extends AppCompatActivity {
         setContentView(R.layout.activity_level1);
         FrameLayout root = findViewById(R.id.level1_root);
 
+        // NEW: nhận extras
+        Intent in = getIntent();
+        difficulty = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
+        playerLevelCurrent = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, 1);
+        playerLevelAtEntry = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelCurrent);
+
         // --- GameView (đặt dưới cùng) ---
         gameView = new GameView(this);
+        gameView.setIslandResId(R.drawable.bg_map_island2);
+        gameView.setStatMultipliersForLevel(2);
         FrameLayout.LayoutParams gvParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -69,6 +82,26 @@ public class Level2Activity extends AppCompatActivity {
 
         // Gắn tên level để lưu điểm vào cột Level2
         gameView.setLevelName("Level2"); // hoặc "Normal"
+        gameView.setStartingPlayerLevel(playerLevelCurrent);
+
+        // NEW: onWin → mở LevelClearActivity
+        gameView.setOnWinListener(() -> runOnUiThread(() -> {
+            stopAndRewindMusic();
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            // >>> LẤY CẤP HIỆN TẠI TỪ GAMEVIEW (sau khi đã cộng EXP/level up)
+            playerLevelCurrent = gameView.getCurrentPlayerLevel();
+
+            Intent it = new Intent(Level2Activity.this, LevelClearActivity.class);
+            it.putExtra(LevelClearActivity.EXTRA_FROM_LEVEL, 2);
+            it.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrent);
+            it.putExtra(LevelClearActivity.EXTRA_IS_LAST_LEVEL, false);
+            it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(it);
+            finish();
+        }));
 
         // ========= RULES CHO LEVEL 2 =========
         // 1) Giết boss KHÔNG thắng (thắng chỉ khi sống sót đủ thời gian)
@@ -81,7 +114,7 @@ public class Level2Activity extends AppCompatActivity {
             @Override public void run() {
                 // chỉ check khi chưa game over
                 if (!gameView.isGameOver()) {
-                    if (gameView.getElapsedSeconds() >= 120) {
+                    if (gameView.getElapsedSeconds() >= 30) {
                         // ✅ Gọi overlay + SAVE (giống Level1). GameView sẽ tự chuyển HighScore sau overlay.
                         gameView.triggerWinByCondition();
                         return;

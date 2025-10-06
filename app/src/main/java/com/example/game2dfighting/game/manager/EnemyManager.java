@@ -79,6 +79,17 @@ public class EnemyManager {
     private KillListener killListener;
     public void setKillListener(KillListener l) { this.killListener = l; }
 
+    // ===== Difficulty multipliers =====
+    private float hpMul  = 1f;
+    private float dmgMul = 1f;
+
+    public void setStatMultipliers(float hpMul, float dmgMul) {
+        this.hpMul  = Math.max(0.1f, hpMul);
+        this.dmgMul = Math.max(0.1f, dmgMul);
+    }
+
+    // Lưu cả max HP theo từng enemy để vẽ thanh máu đúng tỷ lệ
+    private final Map<Enemy, Integer> enemyMaxHp = new HashMap<>();
 
     // ====== Ctor ======
     public EnemyManager(Context ctx, int mapW, int mapH) {
@@ -135,21 +146,24 @@ public class EnemyManager {
         int[] pos = randomSpawnPos();
         Enemy e = new Enemy(ctx, pos[0], pos[1], enemyW, enemyH);
         enemies1.add(e);
-        enemyHp.put(e, Enemy.BASE_HP);
+        enemyHp.put(e, Math.round(Enemy.BASE_HP * hpMul));
+        enemyMaxHp.put(e, Math.round(Enemy.BASE_HP * hpMul));
         nextEnemyAttackAtMs.put(e, 0L);
     }
     private void spawnEnemy2() {
         int[] pos = randomSpawnPos();
         Enemy e = new Enemy2(ctx, pos[0], pos[1], enemyW, enemyH);
         enemies2.add(e);
-        enemyHp.put(e, Enemy2.BASE_HP);
+        enemyHp.put(e, Math.round(Enemy2.BASE_HP * hpMul));
+        enemyMaxHp.put(e, Math.round(Enemy2.BASE_HP * hpMul));
         nextEnemyAttackAtMs.put(e, 0L);
     }
     private void spawnEnemy3() {
         int[] pos = randomSpawnPos();
         Enemy e = new Enemy3(ctx, pos[0], pos[1], enemyW, enemyH);
         enemies3.add(e);
-        enemyHp.put(e, Enemy3.BASE_HP);
+        enemyHp.put(e, Math.round(Enemy3.BASE_HP * hpMul));
+        enemyMaxHp.put(e, Math.round(Enemy3.BASE_HP * hpMul));
         nextEnemyAttackAtMs.put(e, 0L);
     }
 
@@ -193,8 +207,10 @@ public class EnemyManager {
 
             // Init HP & cooldown
             if (!enemyHp.containsKey(e)) {
-                int hp = (typeId == 2) ? Enemy2.BASE_HP : (typeId == 3) ? Enemy3.BASE_HP : Enemy.BASE_HP;
-                enemyHp.put(e, hp);
+                int base = (typeId == 2) ? Enemy2.BASE_HP : (typeId == 3) ? Enemy3.BASE_HP : Enemy.BASE_HP;
+                int scaled = Math.round(base * hpMul);
+                enemyHp.put(e, scaled);
+                enemyMaxHp.put(e, scaled);
             }
             if (!nextEnemyAttackAtMs.containsKey(e)) nextEnemyAttackAtMs.put(e, 0L);
 
@@ -238,7 +254,7 @@ public class EnemyManager {
         long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
         if (now >= readyAt) {
             try { e.startAttack(); } catch (Throwable ignore) {}
-            int dmg = Enemy.BASE_DAMAGE;
+            int dmg = Math.round(Enemy.BASE_DAMAGE * dmgMul);
             boolean playerDead = safeTakeDamage(p, dmg);
             if (combatListener != null) combatListener.onPlayerHit();
             nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
@@ -265,7 +281,7 @@ public class EnemyManager {
         long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
         if (now >= readyAt) {
             try { e.startAttack(); } catch (Throwable ignore) {}
-            int dmg = Enemy2.BASE_DAMAGE;
+            int dmg = Math.round(Enemy2.BASE_DAMAGE * dmgMul);
             boolean playerDead = safeTakeDamage(p, dmg);
             if (combatListener != null) combatListener.onPlayerHit();
             nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
@@ -291,7 +307,7 @@ public class EnemyManager {
         long readyAt = nextEnemyAttackAtMs.getOrDefault(e, 0L);
         if (now >= readyAt) {
             try { e.startAttack(); } catch (Throwable ignore) {}
-            int dmg = Enemy3.BASE_DAMAGE;
+            int dmg = Math.round(Enemy3.BASE_DAMAGE * dmgMul);
             boolean playerDead = safeTakeDamage(p, dmg);
             if (combatListener != null) combatListener.onPlayerHit();
             nextEnemyAttackAtMs.put(e, now + ENEMY_COOLDOWN_MS);
@@ -324,6 +340,7 @@ public class EnemyManager {
             if (dieState && e.isDieAnimDone()) {
                 list.remove(i);
                 enemyHp.remove(e);
+                enemyMaxHp.remove(e);
                 nextEnemyAttackAtMs.remove(e);
             }
         }
@@ -370,15 +387,18 @@ public class EnemyManager {
     private void drawEnemyWithHp(Canvas c, Enemy e, int cameraX, int cameraY) {
         e.draw(c, cameraX, cameraY, sharedPaint);
 
-        int maxHp = (e instanceof Enemy2) ? Enemy2.BASE_HP :
-                (e instanceof Enemy3) ? Enemy3.BASE_HP : Enemy.BASE_HP;
-        final int hp = enemyHp.getOrDefault(e, maxHp);
-        final float ratio = Math.max(0f, Math.min(1f, (float) hp / maxHp));
+        // Lấy max HP đã scale (nếu chưa có, fallback = base * hpMul)
+        int base = (e instanceof Enemy2) ? Enemy2.BASE_HP
+                : (e instanceof Enemy3) ? Enemy3.BASE_HP
+                : Enemy.BASE_HP;
+        int maxHp = enemyMaxHp.getOrDefault(e, Math.round(base * hpMul));
+        int hp    = enemyHp.getOrDefault(e, maxHp);
+        float ratio = Math.max(0f, Math.min(1f, (float) hp / Math.max(1, maxHp)));
 
         // Kích thước & vị trí thanh máu
-        final float barW = e.w; // rộng bề ngang quái
-        final float barH = 10f;                        // cao
-        final float gapY = 20f;                       // cách đỉnh đầu quái
+        final float barW = e.w;         // rộng bề ngang quái
+        final float barH = 10f;         // cao
+        final float gapY = 20f;         // cách đỉnh đầu quái
         final float screenX = e.x - cameraX, screenY = e.y - cameraY;
         final float barX = screenX + (e.w - barW) / 2f, barY = screenY - gapY - barH;
 
@@ -386,7 +406,7 @@ public class EnemyManager {
         c.drawRect(barX, barY, barX + barW, barY + barH, hpBgPaint);
         // Phần máu đỏ
         c.drawRect(barX, barY, barX + barW * ratio, barY + barH, hpPaint);
-        // Viền xanh lá cây
+        // Viền xanh lá
         c.drawRect(barX, barY, barX + barW, barY + barH, hpOutlinePaint);
     }
 

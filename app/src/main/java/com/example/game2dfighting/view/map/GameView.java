@@ -79,6 +79,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private GameEventListener listener;
     public void setGameEventListener(GameEventListener l) { this.listener = l; }
 
+    // ✅ WIN callback (NEW)
+    public interface OnWinListener { void onWin(); }
+    private OnWinListener onWinListener;
+    public void setOnWinListener(OnWinListener l) { this.onWinListener = l; }
+
     // ===== Parallax background =====
     private Bitmap bmpSky, bmpIsland, bmpCloud;
     private int skyW, skyH;
@@ -181,6 +186,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private int  runStepIntervalMs = 220;
     private int  lastPX = Integer.MIN_VALUE, lastPY = Integer.MIN_VALUE;
 
+    private int sfxIceId = 0;
+    private int sfxShieldId = 0;
     private boolean atLeftEdge = false, atRightEdge = false, atTopEdge = false, atBottomEdge = false;
 
     // ===== Debug bounds (outline) =====
@@ -196,7 +203,27 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private static final int HEART_HEAL_HP = 10;
     private static final int HEART_MAX_ON_MAP = 3;
 
-    // GameView.java (fields)
+    // ===== Difficulty (HP & Damage only) =====
+    private float enemyHpMul = 1f, enemyDmgMul = 1f;
+    private float bossHpMul  = 1f, bossDmgMul  = 1f;
+
+    /** Gọi từ LevelXActivity: L1=1, L2=2, L3=3 */
+    public void setStatMultipliersForLevel(int levelIndex) {
+        switch (levelIndex) {
+            case 2:
+                enemyHpMul = 2f; enemyDmgMul = 2f;
+                bossHpMul  = 2f; bossDmgMul  = 2f;
+                break;
+            case 3:
+                enemyHpMul = 3f; enemyDmgMul = 3f;
+                bossHpMul  = 3f; bossDmgMul  = 3f;
+                break;
+            default:
+                enemyHpMul = 1f; enemyDmgMul = 1f;
+                bossHpMul  = 1f; bossDmgMul  = 1f;
+        }
+    }
+
     private int score = 0;
     private long gameStartMs = System.currentTimeMillis();
 
@@ -213,7 +240,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private static final long BOSS_CONGRATS_DURATION_MS = 2000L;
     private Bitmap bmpCongrats; // R.drawable.congratulations
 
-    // Cho phép Activity cấu hình respawn của BossManager
+    //ADD level nhân vật
+    private Integer startingPlayerLevel = null;
+
+    public void setStartingPlayerLevel(int lvl) {
+        startingPlayerLevel = Math.max(1, lvl);
+        if (playerMgr != null) {
+            playerMgr.setLevel(startingPlayerLevel);
+        }
+    }
+
+    public int getCurrentPlayerLevel() {
+        if (playerMgr != null) return playerMgr.getLevel();
+        return 1;
+    }
+
     // Cho phép Activity cấu hình respawn của BossManager
     public void setBossRespawnDelayMs(long ms) {
         if (bossMgr != null) {
@@ -359,6 +400,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     public boolean isMusicEnabled() { return musicEnabled; }
     public boolean isSoundEnabled() { return soundEnabled; }
 
+    // Default: dùng island của level 1 (đổi tên này theo resource bạn đang có)
+    private int islandResId = R.drawable.bg_map_island;
+    public void setIslandResId(int resId) { this.islandResId = resId; }
+
+
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         this.holder = holder;
@@ -367,7 +413,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         initAudioToggleBitmaps();
 
         // ISLAND
-        Bitmap srcIsland = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_island);
+        Bitmap srcIsland = BitmapFactory.decodeResource(getResources(), islandResId);
         bmpIsland = srcIsland;
         mapWidth  = bmpIsland.getWidth();
         mapHeight = bmpIsland.getHeight();
@@ -384,9 +430,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         enemyMgr.setCombatListener(new EnemyManager.CombatListener() {
             @Override public void onPlayerHit() { playPlayerHurtSfx(); }
         });
+        enemyMgr.setStatMultipliers(enemyHpMul, enemyDmgMul);
 
         // Boss
         bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
+        bossMgr.setStatMultipliers(bossHpMul, bossDmgMul);
 
         // Nếu Activity đã cấu hình trước -> apply lại
         if (pendingBossRespawnDelayMs >= 0L) {
@@ -418,15 +466,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
         });
 
-
-
         // Load ảnh chúc mừng
         bmpCongrats = BitmapFactory.decodeResource(getResources(), R.drawable.congratulations);
 
         // NEW: HUD + PlayerManager
         playerHud = new PlayerHudRenderer(getContext());
         playerMgr = new PlayerManager(getContext(), player, mapWidth, mapHeight);
-
+        if (startingPlayerLevel != null) {
+            playerMgr.setLevel(startingPlayerLevel);
+        }
         // SKY
         Bitmap srcSky = BitmapFactory.decodeResource(getResources(), R.drawable.bg_map_level1_sky);
         int viewW = getWidth(), viewH = getHeight();
@@ -831,6 +879,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             sfxPlayerHurtId = soundPool.load(getContext(), R.raw.player_hurt, 1);
             sfxRunStepId = soundPool.load(getContext(), R.raw.run_step1, 1);
             sfxPickupId = soundPool.load(getContext(), R.raw.pickup, 1);
+            sfxIceId        = soundPool.load(getContext(), R.raw.icespike_shoot, 1);
+            sfxShieldId     = soundPool.load(getContext(), R.raw.shield_cast, 1);
+
             soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
                 if (status == 0 && sampleId == sfxFireId) sfxLoaded = true;
             });
@@ -917,14 +968,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
                 // Trong onTouchEvent, khi bấm nút Shield:
                 if (playerHud != null && playerHud.isInShieldButton(tx, ty)) {
-                    // Truyền thêm managers vào
                     if (playerMgr != null) {
+                        boolean willCast = playerMgr.getRemainingCooldownMs(PlayerManager.SkillType.SHIELD) <= 0;
                         playerMgr.tryUseShield(enemyMgr, bossMgr);
+                        if (willCast) {
+                            playShieldSfx();
+                        }
                     }
                     return true;
                 }
-
-
                 break;
             }
         }
@@ -1102,10 +1154,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             }
 
             // Sau 2s thì chuyển High Score
+            // Sau 2s thì báo WIN ra Activity (thay vì tự mở HighScore)
             long t = System.currentTimeMillis() - bossDefeatAtMs;
             if (t >= BOSS_CONGRATS_DURATION_MS && !bossTransitioned) {
                 bossTransitioned = true;
-                openHighScoreScreen();
+                // ✅ Gọi callback onWin để LevelXActivity mở LevelClearActivity
+                if (onWinListener != null) onWinListener.onWin();
             }
         }
 
@@ -1438,7 +1492,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             IceSpike spike = playerMgr.tryUseIceSpike(tx, ty);
             if (spike != null) {
                 icespikes.add(spike);
-                // TODO: playIceSfx();
+                playIceSfx();
             }
         }
     }
@@ -1450,6 +1504,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         if (soundPool == null) return;
         if (!sfxLoaded) return;
         soundPool.play(sfxFireId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+    }
+
+    private void playIceSfx() {
+        if (paused || !soundEnabled || soundPool == null || !sfxLoaded || sfxIceId == 0) return;
+        soundPool.play(sfxIceId, sfxVolume, sfxVolume, 1, 0, 1.0f);
+    }
+
+    private void playShieldSfx() {
+        if (paused || !soundEnabled || soundPool == null || !sfxLoaded || sfxShieldId == 0) return;
+        soundPool.play(sfxShieldId, sfxVolume, sfxVolume, 1, 0, 1.0f);
     }
 
     private void playWallSfx() {
@@ -1630,5 +1694,39 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
     }
 
+    private void applyStartingLevelIfAny() {
+        if (startingPlayerLevel == null) return;
+
+        // Ưu tiên gọi API đúng nếu PlayerManager/Player có:
+        try {
+            // 1) Nếu PlayerManager có setLevel(int)
+            playerMgr.getClass().getMethod("setLevel", int.class)
+                    .invoke(playerMgr, startingPlayerLevel);
+            return;
+        } catch (Throwable ignore) {}
+
+        try {
+            // 2) Nếu Player có setLevel(int)
+            player.getClass().getMethod("setLevel", int.class)
+                    .invoke(player, startingPlayerLevel);
+            return;
+        } catch (Throwable ignore) {}
+
+        // 3) Fallback (không có API đặt thẳng level): gọi "force/recalc" nếu có
+        try {
+            playerMgr.getClass().getMethod("applyStartingLevel", int.class)
+                    .invoke(playerMgr, startingPlayerLevel);
+            return;
+        } catch (Throwable ignore) {}
+
+        // 4) Cuối cùng: tăng thủ công (nếu có getLevel/levelUp)
+        try {
+            int cur = (int) playerMgr.getClass().getMethod("getLevel").invoke(playerMgr);
+            while (cur < startingPlayerLevel) {
+                playerMgr.getClass().getMethod("levelUp").invoke(playerMgr);
+                cur++;
+            }
+        } catch (Throwable ignore) {}
+    }
 
 }

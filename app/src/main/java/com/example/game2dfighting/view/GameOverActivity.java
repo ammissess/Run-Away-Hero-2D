@@ -67,7 +67,8 @@ public class GameOverActivity extends AppCompatActivity {
 
         Button btnRanking = findViewById(R.id.btn_rank);
         btnRanking.setOnClickListener(v -> {
-            Intent i = new Intent(GameOverActivity.this, com.example.game2dfighting.view.HighScoreActivity.class);
+            Intent i = new Intent(GameOverActivity.this, HighScoreActivity.class);
+            i.putExtra(HighScoreActivity.EXTRA_FROM, "gameover");
             startActivity(i);
         });
 

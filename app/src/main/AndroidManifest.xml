@@ -48,6 +48,10 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape"/>
 
+        <activity android:name=".view.LevelClearActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"/>
+
     </application>
 
 </manifest>

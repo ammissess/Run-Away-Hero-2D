@@ -11,6 +11,7 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.media.MediaPlayer;
+import androidx.activity.OnBackPressedCallback;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -36,6 +37,11 @@ public class HighScoreActivity extends AppCompatActivity {
     private final List<Band> bands = new ArrayList<>();
     private boolean running = false, loopPosted = false;
     private long lastNs = 0L;
+
+    public static final String EXTRA_FROM = "from"; // "home" | "gameover" | "levelclear"
+
+    private String from = "home"; // default
+
 
     // Vòng lặp cập nhật mây ~60fps (giống HomeActivity)
     private final Runnable cloudLoop = new Runnable() {
@@ -66,6 +72,9 @@ public class HighScoreActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_high_score);
 
+        String f = getIntent().getStringExtra(EXTRA_FROM);
+        if (f != null) from = f;
+
         rvL1 = findViewById(R.id.rvScoresL1);
         rvL2 = findViewById(R.id.rvScoresL2);
         rvL3 = findViewById(R.id.rvScoresL3);
@@ -94,11 +103,27 @@ public class HighScoreActivity extends AppCompatActivity {
         rvL3.setAdapter(new ScoreAdapter(topN(l3, 6)));
 
         Button btnBack = findViewById(R.id.btnBackHome);
+
+        // Nếu vào từ LevelClear → đổi nhãn nút (tuỳ thích)
+        if ("levelclear".equals(from)) {
+            btnBack.setText("Back");
+        }
+
+        // Hành vi nút Back trong UI
         btnBack.setOnClickListener(v -> {
-            Intent i = new Intent(this, HomeActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(i);
-            finish();
+            if ("levelclear".equals(from)) {
+                finish();
+            } else if ("finalclear".equals(from)) {
+                Intent i = new Intent(this, HomeActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(i);
+                finish();
+            } else {
+                Intent i = new Intent(this, HomeActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(i);
+                finish();
+            }
         });
 
         // ==== Nhạc nền (bật loop + fade-in thay vì để 0f) ====
@@ -126,6 +151,29 @@ public class HighScoreActivity extends AppCompatActivity {
                         }
                     });
         }
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if ("levelclear".equals(from)) {
+                    // Quay lại LevelClear để tiếp tục Next/Replay (màn 1/2)
+                    finish();
+                } else if ("finalclear".equals(from)) {
+                    // Thắng màn 3: về Home
+                    Intent i = new Intent(HighScoreActivity.this, HomeActivity.class);
+                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(i);
+                    finish();
+                } else {
+                    // Từ Home hoặc GameOver → về Home
+                    Intent i = new Intent(HighScoreActivity.this, HomeActivity.class);
+                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(i);
+                    finish();
+                }
+            }
+        });
+
     }
 
     private void setupRecycler(RecyclerView rv) {
@@ -241,4 +289,6 @@ public class HighScoreActivity extends AppCompatActivity {
             }, (long) i * stepDelay);
         }
     }
+
+
 }

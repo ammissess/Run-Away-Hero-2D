@@ -29,6 +29,11 @@ public class Level3Activity extends AppCompatActivity {
 
     private MediaPlayer bgMusic;
 
+    // NEW
+    private int difficulty = 1;
+    private int playerLevelCurrent = 1;
+    private int playerLevelAtEntry = 1;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -43,8 +48,16 @@ public class Level3Activity extends AppCompatActivity {
         setContentView(R.layout.activity_level1);
         FrameLayout root = findViewById(R.id.level1_root);
 
+        // NEW: nhận extras
+        Intent in = getIntent();
+        difficulty = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
+        playerLevelCurrent = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, 1);
+        playerLevelAtEntry = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelCurrent);
+
         // --- GameView (đặt dưới cùng) ---
         gameView = new GameView(this);
+        gameView.setIslandResId(R.drawable.bg_map_island3);
+        gameView.setStatMultipliersForLevel(3);
         FrameLayout.LayoutParams gvParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -69,6 +82,26 @@ public class Level3Activity extends AppCompatActivity {
 
         // Gắn tên level để lưu điểm vào cột Level3
         gameView.setLevelName("Level3"); // hoặc "Hard"
+        gameView.setStartingPlayerLevel(playerLevelCurrent);
+
+        // NEW: onWin → mở LevelClearActivity (is_last_level = true)
+        gameView.setOnWinListener(() -> runOnUiThread(() -> {
+            stopAndRewindMusic();
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            // >>> LẤY CẤP HIỆN TẠI TỪ GAMEVIEW (sau khi đã cộng EXP/level up)
+            playerLevelCurrent = gameView.getCurrentPlayerLevel();
+
+            Intent it = new Intent(Level3Activity.this, LevelClearActivity.class);
+            it.putExtra(LevelClearActivity.EXTRA_FROM_LEVEL, 3);
+            it.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            it.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrent);
+            it.putExtra(LevelClearActivity.EXTRA_IS_LAST_LEVEL, true); // <- Level cuối
+            it.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(it);
+            finish();
+        }));
 
         // ========= RULES CHO LEVEL 3 =========
         // 1) Giết boss KHÔNG thắng (thắng theo điểm)
@@ -80,7 +113,7 @@ public class Level3Activity extends AppCompatActivity {
         final Runnable lv3Check = new Runnable() {
             @Override public void run() {
                 if (!gameView.isGameOver()) {
-                    if (gameView.getScore() >= 500) {
+                    if (gameView.getScore() >= 100) {
                         // KHÔNG mở HighScore trực tiếp.
                         // Gọi GameView để hiện overlay “Congratulations” và SAVE rồi tự chuyển HighScore.
                         gameView.triggerWinByCondition();

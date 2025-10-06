@@ -48,6 +48,16 @@ public class BossManager {
     private KillListener killListener;
     public void setKillListener(KillListener l) { this.killListener = l; }
 
+    // ===== Difficulty multipliers =====
+    private float hpMul  = 1f;
+    private float dmgMul = 1f;
+
+    public void setStatMultipliers(float hpMul, float dmgMul) {
+        this.hpMul  = Math.max(0.1f, hpMul);
+        this.dmgMul = Math.max(0.1f, dmgMul);
+    }
+
+
     public BossManager(Context ctx, int mapW, int mapH, long appearAfterMs) {
         this.ctx = ctx;
         this.mapW = mapW;
@@ -79,8 +89,7 @@ public class BossManager {
     public boolean isDefeated()  { return boss == null && spawned; }
     public Boss getBoss()        { return boss; }
     public int  getHp()          { return bossHp; }
-    public int  getHpMax()       { return Boss.BASE_HP; }
-
+    public int getHpMax() { return Math.round(Boss.BASE_HP * hpMul); }
 
 
     // ===== Spawn =====
@@ -100,7 +109,7 @@ public class BossManager {
             int by = (mapH - bh) / 3;
 
             boss = new Boss(ctx, bx, by, bw, bh);
-            bossHp = Boss.BASE_HP;
+            bossHp = Math.round(Boss.BASE_HP * hpMul);
             nextBossAttackAtMs = 0L;
             nextPlayerAttackAtMs = 0L;
 
@@ -161,7 +170,7 @@ public class BossManager {
             if (now >= nextBossAttackAtMs && boss.getState() != Boss.State.ATTACK) {
                 try { boss.startAttack(); } catch (Throwable ignore) {}
                 bossAttackLockUntilMs = now + BOSS_ATTACK_LOCK_MS;
-                try { p.takeDamage(Boss.BASE_DAMAGE); } catch (Throwable ignore) {}
+                try { p.takeDamage(Math.round(Boss.BASE_DAMAGE * dmgMul)); } catch (Throwable ignore) {}
                 nextBossAttackAtMs = now + BOSS_COOLDOWN_MS;
             }
 
@@ -216,7 +225,7 @@ public class BossManager {
         float bx    = bossScreenX + (boss.w - barW) / 2f;
         float byTop = bossScreenY - gap - (3 * segH + 2 * spacing);
 
-        float ratio = Math.max(0f, Math.min(1f, bossHp / (float) Boss.BASE_HP));
+        float ratio = Math.max(0f, Math.min(1f, bossHp / (float) getHpMax()));
         int segments = 3;
         float totalUnits = ratio * segments;
 
