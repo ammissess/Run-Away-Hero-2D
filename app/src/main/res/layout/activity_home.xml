@@ -84,7 +84,7 @@
                 android:layout_marginBottom="32dp"
                 android:gravity="center"
                 android:text="HOME"
-                android:textColor="@android:color/white"
+                android:textColor="@android:color/black"
                 android:textSize="96sp"
                 android:textStyle="bold" />
 

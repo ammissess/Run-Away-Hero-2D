@@ -32,6 +32,9 @@ public class Level1Activity extends AppCompatActivity {
     private int playerLevelCurrent = 1;    // cấp hiện tại của nhân vật
     private int playerLevelAtEntry = 1;    // snapshot khi vào level
 
+    //cờ khóa nút pause nếu wingame
+    private boolean hasWon = false; // thêm ở đầu class
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -90,6 +93,7 @@ public class Level1Activity extends AppCompatActivity {
 
         // NEW: đăng ký onWin để mở LevelClearActivity
         gameView.setOnWinListener(() -> runOnUiThread(() -> {
+            hasWon = true; //đánh dấu flag win
             stopAndRewindMusic();
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
 
@@ -154,7 +158,7 @@ public class Level1Activity extends AppCompatActivity {
 
         // --- Setup listeners ---
         btnPause.setOnClickListener(v -> {
-            if (!gameView.isPaused()) {
+            if (!gameView.isPaused() && !hasWon ) { //chặn nút nếu win ván
                 gameView.setPaused(true);
                 pauseOverlay.setVisibility(View.VISIBLE);
                 if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
@@ -219,7 +223,7 @@ public class Level1Activity extends AppCompatActivity {
     // Trong Level1Activity.onPause(), thêm check để tránh show overlay khi game over
     @Override
     protected void onPause() {
-        if (gameView != null && !gameView.isGameOver() && !gameView.isPaused()) {  // Thêm !gameView.isGameOver()
+        if (gameView != null && !gameView.isGameOver() && !hasWon && !gameView.isPaused()) {  // Thêm !gameView.isGameOver() //them kiểm tra flag win
             gameView.setPaused(true);
             if (pauseOverlay != null) {
                 pauseOverlay.setVisibility(View.VISIBLE);

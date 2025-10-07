@@ -34,6 +34,8 @@ public class Level2Activity extends AppCompatActivity {
     private int playerLevelCurrent = 1;
     private int playerLevelAtEntry = 1;
 
+    private boolean hasWon = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -86,6 +88,7 @@ public class Level2Activity extends AppCompatActivity {
 
         // NEW: onWin → mở LevelClearActivity
         gameView.setOnWinListener(() -> runOnUiThread(() -> {
+            hasWon = true;
             stopAndRewindMusic();
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
 
@@ -168,7 +171,7 @@ public class Level2Activity extends AppCompatActivity {
 
         // Pause
         btnPause.setOnClickListener(v -> {
-            if (!gameView.isPaused()) {
+            if (!gameView.isPaused()  && !hasWon) {
                 gameView.setPaused(true);
                 pauseOverlay.setVisibility(View.VISIBLE);
                 if (bgMusic != null && bgMusic.isPlaying()) bgMusic.pause();
@@ -229,7 +232,7 @@ public class Level2Activity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        if (gameView != null && !gameView.isGameOver() && !gameView.isPaused()) {
+        if (gameView != null && !gameView.isGameOver() && !hasWon && !gameView.isPaused()) {
             gameView.setPaused(true);
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.VISIBLE);
         }
