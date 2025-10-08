@@ -88,10 +88,36 @@ public class LaserBeam {
     }
 
     // Kiểm tra va chạm với player (chỉ phần đầu laser)
+//    public boolean hit(Player p) {
+//        if (!alive) return false;
+//        RectF player = new RectF(p.x, p.y, p.x + p.w, p.y + p.h);
+//        RectF hit = new RectF(x - 24, y - 24, x + 24, y + 24);
+//        return RectF.intersects(hit, player);
+//    }
+
+    //sưả laer de ban phat ko chet van ne duoc
     public boolean hit(Player p) {
         if (!alive) return false;
-        RectF player = new RectF(p.x, p.y, p.x + p.w, p.y + p.h);
-        RectF hit = new RectF(x - 24, y - 24, x + 24, y + 24);
-        return RectF.intersects(hit, player);
+
+        // Trung tâm player
+        float px = p.x + p.w / 2f;
+        float py = p.y + p.h / 2f;
+
+        // Đầu và cuối tia
+        float len = 4000f;
+        float x2 = x + vx * len;
+        float y2 = y + vy * len;
+
+        // Khoảng cách vuông góc từ player đến tia
+        float dist = Math.abs((y2 - y) * px - (x2 - x) * py + x2 * y - y2 * x)
+                / (float) Math.sqrt(Math.pow(y2 - y, 2) + Math.pow(x2 - x, 2));
+
+        // Vị trí chiếu của player lên tia (0 = đầu, 1 = cuối)
+        float t = ((px - x) * vx + (py - y) * vy) / len;
+
+        // Chỉ tính khi player nằm trong đoạn tia (0 ≤ t ≤ 1) và gần đường tia
+        return t >= 0f && t <= 1f && dist < p.w * 0.3f;
     }
+
+
 }
