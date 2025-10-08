@@ -407,6 +407,20 @@ public class BossAngel extends GameObject {
             c.drawCircle(x + w / 2f - camX, y + h / 2f - camY, 120 + 40 * progress, outline);
         }
     }
+//hàm xly boss angle hẹo
+    public void onDie() {
+        try {
+            java.lang.reflect.Method setState =
+                    com.example.game2dfighting.game.core.GameObject.class
+                            .getDeclaredMethod("setState",
+                                    com.example.game2dfighting.game.core.GameObject.State.class);
+            setState.setAccessible(true);
+            setState.invoke(this, com.example.game2dfighting.game.core.GameObject.State.DIE);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private void shootCircleBullets() {
         int count = 8;

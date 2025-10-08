@@ -71,7 +71,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private int rockBossAlive = 0;
 
 
-
+    //trạng thái win map cuối
+    private boolean winHandled = false;
     // NEW: HUD & PlayerManager
     private PlayerHudRenderer playerHud;
     private PlayerManager playerMgr;
@@ -1849,13 +1850,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             long elapsed = getElapsedMsAccurate();
             ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis(), levelName);
 
-            timerPaused = true;                // dừng thời gian
-            bossDefeated = true;               // bật overlay chúc mừng
+            timerPaused = true;
+            bossDefeated = true;
             bossDefeatAtMs = System.currentTimeMillis();
             bossTransitioned = false;
             bossFadeAlpha = 0f;
         }
+
+        if (!winHandled) {
+            winHandled = true;
+            if (onWinListener != null) onWinListener.onWin();
+        }
     }
+
 
     private void applyStartingLevelIfAny() {
         if (startingPlayerLevel == null) return;

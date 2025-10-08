@@ -144,150 +144,90 @@ public class ShieldBomb extends Shield {  // Kế thừa từ Shield để giữ
         //Hư thức - tử
 
 // === Hư Thức Tử: tuyệt kỹ thanh tẩy toàn map ===
+// === Hư Thức Tử: tuyệt kỹ thanh tẩy toàn map ===
         try {
             int playerLevel = myPlayer.getLevel();
             boolean highLevel = (playerLevel >= 9);
-            boolean bossFury = false;
+            boolean bossFury = bossAngelMgr != null
+                    && bossAngelMgr.getBoss() != null
+                    && bossAngelMgr.getBoss().isFuryMode();
 
-// --- XỬ LÝ BOSS ANGEL độc lập ---
-            if (bossAngelMgr != null && bossAngelMgr.getBoss() != null) {
-                try {
-                    // Lấy HP hiện tại của Angel
-                    java.lang.reflect.Field hpField =
-                            bossAngelMgr.getClass().getDeclaredField("bossHp");
-                    hpField.setAccessible(true);
-                    int currentHp = hpField.getInt(bossAngelMgr);
-
-                    int dmg = (int) (currentHp * DAMAGE_PERCENT);
-
-                    // Trừ máu qua API có sẵn -> sẽ kích killListener khi về 0
-                    java.lang.reflect.Method hitMethod =
-                            bossAngelMgr.getClass().getMethod("applyBulletHit", int.class);
-                    hitMethod.invoke(bossAngelMgr, dmg);
-
-                    // Đẩy lùi Angel
-                    com.example.game2dfighting.game.entity.BossAngel angel = bossAngelMgr.getBoss();
-                    if (angel != null) {
-                        float bx = angel.x + angel.w / 2f;
-                        float by = angel.y + angel.h / 2f;
-                        pushBackEntity(angel, px, py, bx, by);
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-
-            // Điều kiện kích hoạt tuyệt kỹ
             if (highLevel && bossFury) {
-
-                // ===== 1. Clear toàn bộ Enemy =====
+                // ===== 1. Diệt sạch quái thường =====
                 if (enemyMgr != null) {
                     try {
                         java.lang.reflect.Method clearEnemies =
                                 enemyMgr.getClass().getMethod("clearAll");
                         clearEnemies.invoke(enemyMgr);
                     } catch (Exception e1) {
-                        // fallback nếu EnemyManager chưa có clearAll()
-                        java.lang.reflect.Method setStateM =
-                                com.example.game2dfighting.game.core.GameObject.class
-                                        .getDeclaredMethod("setState",
-                                                com.example.game2dfighting.game.core.GameObject.State.class);
-                        setStateM.setAccessible(true);
                         for (Enemy e : enemyMgr.list()) {
-                            try { setStateM.invoke(e, com.example.game2dfighting.game.core.GameObject.State.DIE); }
-                            catch (Exception ignore) {}
+                            try {
+                                java.lang.reflect.Method setState =
+                                        com.example.game2dfighting.game.core.GameObject.class
+                                                .getDeclaredMethod("setState",
+                                                        com.example.game2dfighting.game.core.GameObject.State.class);
+                                setState.setAccessible(true);
+                                setState.invoke(e, com.example.game2dfighting.game.core.GameObject.State.DIE);
+                            } catch (Exception ignore) {}
                         }
                         enemyMgr.list().clear();
                     }
                 }
 
-                // ===== 2. Clear toàn bộ Boss Người Đá =====
-//                if (bossMgr != null) {
-//                    try {
-//                        java.lang.reflect.Method clearBosses =
-//                                bossMgr.getClass().getMethod("clearAll");
-//                        clearBosses.invoke(bossMgr);
-//                    } catch (Exception e2) {
-//                        if (bossMgr.isActive()) {
-//                            com.example.game2dfighting.game.entity.Boss b = bossMgr.getBoss();
-//                            if (b != null) {
-//                                java.lang.reflect.Method setStateM =
-//                                        com.example.game2dfighting.game.core.GameObject.class
-//                                                .getDeclaredMethod("setState",
-//                                                        com.example.game2dfighting.game.core.GameObject.State.class);
-//                                setStateM.setAccessible(true);
-//                                setStateM.invoke(b, com.example.game2dfighting.game.core.GameObject.State.DIE);
-//                            }
-//                        }
-//                    }
-//                }
-
-                // --- XỬ LÝ BOSS ĐÁ (độc lập) ---
+                // ===== 2. Diệt Boss đá =====
                 if (bossMgr != null && bossMgr.isActive()) {
                     Boss boss = bossMgr.getBoss();
-                    if (boss != null && boss.getState() != com.example.game2dfighting.game.core.GameObject.State.DIE) {
-                        int currentHp = bossMgr.getHp();
-                        int dmg = (int) (currentHp * DAMAGE_PERCENT);
-                        bossMgr.applyBulletHit(dmg);
-
-                        float bx = boss.x + boss.w / 2f;
-                        float by = boss.y + boss.h / 2f;
-                        pushBackEntity(boss, px, py, bx, by);
+                    if (boss != null) {
+                        try {
+                            java.lang.reflect.Method setState =
+                                    com.example.game2dfighting.game.core.GameObject.class
+                                            .getDeclaredMethod("setState",
+                                                    com.example.game2dfighting.game.core.GameObject.State.class);
+                            setState.setAccessible(true);
+                            setState.invoke(boss, com.example.game2dfighting.game.core.GameObject.State.DIE);
+                        } catch (Exception ignore) {}
                     }
+                    bossMgr.clearAll();
                 }
-                // ===== 3. Clear luôn BossAngel =====
+
+                // ===== 3. Diệt BossAngel =====
+
                 if (bossAngelMgr != null && bossAngelMgr.getBoss() != null) {
                     com.example.game2dfighting.game.entity.BossAngel angel = bossAngelMgr.getBoss();
                     try {
-                        java.lang.reflect.Method setStateM =
+                        // Đặt state DIE
+                        java.lang.reflect.Method setState =
                                 com.example.game2dfighting.game.core.GameObject.class
                                         .getDeclaredMethod("setState",
                                                 com.example.game2dfighting.game.core.GameObject.State.class);
-                        setStateM.setAccessible(true);
-                        setStateM.invoke(angel, com.example.game2dfighting.game.core.GameObject.State.DIE);
+                        setState.setAccessible(true);
+                        setState.invoke(angel, com.example.game2dfighting.game.core.GameObject.State.DIE);
 
-                        // Trừ máu BossAngel về 0 để trigger logic thắng
+                        // HP về 0 để BossAngelManager.update() xử lý thắng
                         java.lang.reflect.Field hpField =
                                 bossAngelMgr.getClass().getDeclaredField("bossHp");
                         hpField.setAccessible(true);
                         hpField.setInt(bossAngelMgr, 0);
-
-                        // Gọi callback thắng nếu có (an toàn)
-                        try {
-                            java.lang.reflect.Method winTrigger =
-                                    bossAngelMgr.getClass().getMethod("triggerWinByCondition");
-                            winTrigger.invoke(bossAngelMgr);
-                        } catch (NoSuchMethodException ignore) {
-                            // fallback: gọi qua GameView
-                            try {
-                                java.lang.reflect.Field gameViewField =
-                                        bossAngelMgr.getClass().getDeclaredField("gameView");
-                                gameViewField.setAccessible(true);
-                                Object gv = gameViewField.get(bossAngelMgr);
-                                if (gv != null) {
-                                    java.lang.reflect.Method winView =
-                                            gv.getClass().getMethod("triggerWinByCondition");
-                                    winView.invoke(gv);
-                                }
-                            } catch (Exception ignore2) {}
-                        }
-
                     } catch (Exception ex) {
                         ex.printStackTrace();
                     }
                 }
 
-                // === 4. Hiệu ứng flash trắng màn hình (tùy chọn) ===
+
+                // ===== 4. Hiệu ứng flash trắng màn hình =====
                 try {
-                    java.lang.reflect.Method addEffect =
+                    java.lang.reflect.Method flash =
                             myPlayer.getClass().getMethod("triggerScreenFlash", int.class);
-                    addEffect.invoke(myPlayer, Color.WHITE);
+                    flash.invoke(myPlayer, Color.WHITE);
                 } catch (Exception ignore) {}
 
+                return; // Kết thúc, không làm phần nổ 50% HP nữa
             }
+
         } catch (Throwable t) {
             t.printStackTrace();
         }
+
 
 
     }

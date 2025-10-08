@@ -91,11 +91,14 @@ public class BossAngelManager {
             nextAttackAtMs = now + ATTACK_INTERVAL_MS;
         }
 
-        if (bossHp <= 0) {
+        if (bossHp <= 0 && bossAngel != null) {
+            try { bossAngel.onDie(); } catch (Throwable ignore) {}
             if (killListener != null) killListener.onBossKilled();
             bossAngel = null;
             spawned = false;
+            return;
         }
+
 
         // Đạn
         for (int i = bossAngel.getBullets().size() - 1; i >= 0; i--) {
