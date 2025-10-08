@@ -57,6 +57,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private BossAngel bossAngel;  // ✨ Boss thiên thần riêng cho Level 3
     private BossAngelManager bossAngelMgr;
 
+    // ====== LEVEL 3 PHASE CONTROL ======
+    private enum Level3Phase {
+        START,          // BossAngel chỉ bay
+        ENEMY_FIGHT,    // Đánh quái thường để tích điểm
+        ROCK_BOSSES,    // 5 Boss người đá xuất hiện
+        ANGEL_ATTACK,   // BossAngel bắt đầu tấn công
+        FINISHED        // BossAngel chết => thắng
+    }
+    private Level3Phase lv3Phase = Level3Phase.START;
+    private boolean enemiesStopped = false;
+    private int rockBossSpawned = 0;
+    private int rockBossAlive = 0;
+
 
 
     // NEW: HUD & PlayerManager
@@ -444,24 +457,43 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         bossMgr.setStatMultipliers(bossHpMul, bossDmgMul);
 
 // Nếu là Level3 thì dùng BossAngelManager thay cho Boss thường
+//        if ("Level3".equalsIgnoreCase(levelName)) {
+//            bossAngelMgr = new BossAngelManager(getContext(), mapWidth, mapHeight);
+//            bossAngelMgr.setStatMultipliers(bossHpMul, bossDmgMul);
+//            bossAngelMgr.setKillListener(() -> addScore(200)); // +200 điểm
+//
+//            // ✨ Boss Angel sẽ xuất hiện sau 5 giây
+//            new android.os.Handler().postDelayed(() -> {
+//                bossAngelMgr.maybeSpawn();
+//
+//                // Sau khi spawn 10s → bắt đầu cho phép tấn công
+//                new android.os.Handler().postDelayed(() -> {
+//                    if (bossAngelMgr.getBoss() != null) {
+//                        bossAngelMgr.getBoss().enableAttack(); // sẽ tạo hàm này
+//                    }
+//                }, 10_000);
+//            }, 5_000);
+//        }
+        //===thay mới cơ chế
         if ("Level3".equalsIgnoreCase(levelName)) {
+            bossKillGrantsWin = false;
             bossAngelMgr = new BossAngelManager(getContext(), mapWidth, mapHeight);
             bossAngelMgr.setStatMultipliers(bossHpMul, bossDmgMul);
-            bossAngelMgr.setKillListener(() -> addScore(200)); // +200 điểm
+            bossAngelMgr.setKillListener(() -> {
+                addScore(500); // BossAngel bị diệt => thắng
+                lv3Phase = Level3Phase.FINISHED;
+                triggerWinByCondition();
+            });
 
-            // ✨ Boss Angel sẽ xuất hiện sau 5 giây
+            // Spawn bossAngel sớm nhưng không tấn công
             new android.os.Handler().postDelayed(() -> {
                 bossAngelMgr.maybeSpawn();
-
-                // Sau khi spawn 10s → bắt đầu cho phép tấn công
-                new android.os.Handler().postDelayed(() -> {
-                    if (bossAngelMgr.getBoss() != null) {
-                        bossAngelMgr.getBoss().enableAttack(); // sẽ tạo hàm này
-                    }
-                }, 10_000);
-            }, 5_000);
+                lv3Phase = Level3Phase.ENEMY_FIGHT;
+            }, 2000);
         }
-         else {
+
+
+        else {
             bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
             bossMgr.setStatMultipliers(bossHpMul, bossDmgMul);
         }
@@ -480,17 +512,19 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         bossMgr.setKillListener(() -> {
             addScore(100);
 
-            // Nếu level KHÔNG cho thắng khi giết boss -> chỉ cộng điểm, để BossManager tự respawn (nếu có cấu hình)
-            if (!bossKillGrantsWin) {
-                return;
+            // ❌ Nếu đang ở Level3 thì không được thắng khi boss người đá chết
+            if ("Level3".equalsIgnoreCase(levelName)) {
+                bossKillGrantsWin = false;
+                return; // chỉ cộng điểm, không trigger thắng
             }
 
+            // ✅ Còn lại các màn khác thì giữ logic cũ
+            if (!bossKillGrantsWin) return;
+
             if (!bossDefeated && !deathSequence) {
-                // 👉 lấy elapsed TRƯỚC khi pause
                 long elapsed = getElapsedMsAccurate();
                 ScoreManager.saveRun(getContext(), getScore(), elapsed, System.currentTimeMillis(), levelName);
 
-                // rồi mới pause + bật overlay
                 timerPaused = true;
                 bossDefeated = true;
                 bossDefeatAtMs = System.currentTimeMillis();
@@ -498,6 +532,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 bossFadeAlpha = 0f;
             }
         });
+
 
         // Load ảnh chúc mừng
         bmpCongrats = BitmapFactory.decodeResource(getResources(), R.drawable.congratulations);
@@ -683,12 +718,83 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 enemyMgr.maybeSpawn();
                 enemyMgr.updateTowardsPlayer(player, dtMs);
 
+                //Quản lý logic trong map3
+
+
+                //===========logic map3 ===============
+
+                // ====== LEVEL 3 PHASE MANAGEMENT ======
+                if ("Level3".equalsIgnoreCase(levelName) && bossAngelMgr != null) {
+                    switch (lv3Phase) {
+                        case START:
+                            // chờ BossAngel spawn
+                            break;
+
+                        case ENEMY_FIGHT:
+                            // Khi đủ 100 điểm -> dừng spawn quái, xuất hiện 5 Boss người đá
+                            if (getScore() >= 100 && !enemiesStopped) {
+                                enemiesStopped = true;
+                                try {
+                                    java.lang.reflect.Method stop = enemyMgr.getClass().getMethod("stopSpawning");
+                                    stop.invoke(enemyMgr);
+                                } catch (Exception ignore) {}
+                                rockBossSpawned = 5;
+                                rockBossAlive = 5;
+                                for (int i = 0; i < rockBossSpawned; i++) bossMgr.maybeSpawn();
+                                lv3Phase = Level3Phase.ROCK_BOSSES;
+                            }
+                            break;
+
+                        case ROCK_BOSSES:
+                            // Đếm số boss người đá còn sống
+                            if (!bossMgr.isActive()) {
+                                // Khi 5 boss người đá chết -> kích hoạt BossAngel
+                                if (bossAngelMgr.getBoss() != null) {
+                                    bossAngelMgr.getBoss().enableAttack();
+                                }
+                                // Gọi lại 5 boss người đá tấn công cùng
+                                for (int i = 0; i < 5; i++) bossMgr.maybeSpawn();
+                                lv3Phase = Level3Phase.ANGEL_ATTACK;
+                            }
+                            break;
+
+                        case ANGEL_ATTACK:
+                            // Nếu BossAngel chết thì thắng
+                            if (!bossAngelMgr.isActive() || lv3Phase == Level3Phase.FINISHED) {
+                                lv3Phase = Level3Phase.FINISHED;
+                                triggerWinByCondition();
+                            }
+                            break;
+
+                        case FINISHED:
+                            // Màn kết thúc
+                            break;
+                    }
+                }
+
+
+
+
+
+                //===logicmap3 =====================
+
                 // boss
 // Sửa collision code trong run() (thay thế phần collision cũ)
+//                if (bossMgr != null) {
+//                    bossMgr.maybeSpawn();
+//                    bossMgr.update(player, dtMs);
+//                }
+
                 if (bossMgr != null) {
                     bossMgr.maybeSpawn();
                     bossMgr.update(player, dtMs);
+
+                    // 🔒 Nếu đang ở Level3, không cho bossMgr kích hoạt Win
+                    if ("Level3".equalsIgnoreCase(levelName)) {
+                        bossDefeated = false; // reset để không bị trigger overlay Win
+                    }
                 }
+
 
                 //boss Angel
                 // BossAngel logic riêng cho Level3

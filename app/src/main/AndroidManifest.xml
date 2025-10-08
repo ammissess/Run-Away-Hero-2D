@@ -21,22 +21,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
         <!-- HomeActivity: Trang chủ -->
         <activity
             android:name=".view.HomeActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
-
         <!-- Level1Activity: Level 1 -->
         <activity
             android:name=".view.Level1Activity"
             android:exported="false"
             android:screenOrientation="landscape" />
-
         <activity android:name=".view.Level2Activity"
             android:exported="false" />
-
         <activity android:name=".view.Level3Activity"
             android:exported="false" />
         <activity
@@ -51,7 +47,5 @@
         <activity android:name=".view.LevelClearActivity"
             android:exported="false"
             android:screenOrientation="sensorLandscape"/>
-
     </application>
-
 </manifest>

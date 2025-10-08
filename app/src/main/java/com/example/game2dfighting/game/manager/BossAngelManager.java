@@ -76,6 +76,13 @@ public class BossAngelManager {
     public void update(Player p, long dtMs) {
         if (bossAngel == null) return;
         bossAngel.update(dtMs, p, bossHp, Math.round(BASE_HP * hpMul));
+
+        // 👉 Nếu boss đang invulnerable thì chỉ bay, không gây sát thương hoặc bị trúng đạn
+        if (bossAngel.isInvulnerable()) {
+            bossAngel.pursue(p.x, p.y, dtMs);
+            return;
+        }
+
         bossAngel.pursue(p.x, p.y, dtMs);
 
         long now = System.currentTimeMillis();
@@ -111,6 +118,8 @@ public class BossAngelManager {
 
     public void applyBulletHit(int dmg) {
         if (bossAngel == null) return;
+        if (bossAngel.isInvulnerable()) return; // ⚡ chặn damage khi chưa kích hoạt
+
         bossHp = Math.max(0, bossHp - Math.max(0, dmg));
         if (bossHp == 0 && killListener != null) {
             killListener.onBossKilled();
@@ -118,6 +127,8 @@ public class BossAngelManager {
             spawned = false;
         }
     }
+
+
 
     public void draw(Canvas c, int offsetX, int offsetY) {
         if (bossAngel == null) return;
