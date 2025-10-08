@@ -67,14 +67,17 @@ public class GameOverActivity extends AppCompatActivity {
             Intent intent = new Intent(GameOverActivity.this, restartActivityClass);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
 
-            // >>> FORWARD ĐẦY ĐỦ EXTRAS <<<
+            // Giữ độ khó như cũ
             intent.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, replayDifficulty);
-            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, replayLevelAtEntry);
-            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, replayLevelCurrent);
+
+            // QUAN TRỌNG: Replay quay về cấp lúc vào màn (reset)
+            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY,   replayLevelAtEntry);
+            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT,     replayLevelAtEntry); // <- ĐỔI từ replayLevelCurrent sang replayLevelAtEntry
 
             startActivity(intent);
             finish();
         });
+
 
         Button btnRanking = findViewById(R.id.btn_rank);
         btnRanking.setOnClickListener(v -> {

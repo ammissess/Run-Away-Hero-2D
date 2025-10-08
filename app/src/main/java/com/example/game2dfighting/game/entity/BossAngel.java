@@ -421,7 +421,6 @@ public class BossAngel extends GameObject {
         }
     }
 
-
     private void shootCircleBullets() {
         int count = 8;
         for (int i = 0; i < count; i++) {
