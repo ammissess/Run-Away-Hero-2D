@@ -134,8 +134,17 @@ public class Level2Activity extends AppCompatActivity {
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            int playerLevelCurrentNow = gameView.getCurrentPlayerLevel();
+
             Intent i = new Intent(Level2Activity.this, GameOverActivity.class);
             i.putExtra("restart_activity", Level2Activity.class.getName());
+
+            // >>> THÊM 3 EXTRAS NÀY <<<
+            i.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrentNow);
+
             startActivity(i);
             finish();
         }));

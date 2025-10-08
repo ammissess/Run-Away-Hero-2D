@@ -774,14 +774,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 }
 
                 //===logicmap3 =====================
-
-                // boss
-// Sửa collision code trong run() (thay thế phần collision cũ)
-//                if (bossMgr != null) {
-//                    bossMgr.maybeSpawn();
-//                    bossMgr.update(player, dtMs);
-//                }
-
                 if (bossMgr != null) {
                     bossMgr.maybeSpawn();
                     bossMgr.update(player, dtMs);

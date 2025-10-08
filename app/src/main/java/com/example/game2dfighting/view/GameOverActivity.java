@@ -33,6 +33,13 @@ public class GameOverActivity extends AppCompatActivity {
     // >>> NEW: tên activity để restart
     private Class<?> restartActivityClass = Level1Activity.class; // fallback
 
+    // >>> LẤY THÊM CÁC EXTRAS VỀ CẤP/ĐỘ KHÓ
+    Intent in = getIntent();
+    final int replayDifficulty       = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
+    final int replayLevelAtEntry     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, 1);
+    final int replayLevelCurrent     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, replayLevelAtEntry);
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -57,10 +64,14 @@ public class GameOverActivity extends AppCompatActivity {
                 mediaPlayer.pause();
                 mediaPlayer.seekTo(0);
             }
-            // >>> NEW: mở lại đúng màn vừa thua
             Intent intent = new Intent(GameOverActivity.this, restartActivityClass);
-            // Xoá stack cũ cho sạch sẽ (tuỳ bạn)
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+            // >>> FORWARD ĐẦY ĐỦ EXTRAS <<<
+            intent.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, replayDifficulty);
+            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, replayLevelAtEntry);
+            intent.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, replayLevelCurrent);
+
             startActivity(intent);
             finish();
         });

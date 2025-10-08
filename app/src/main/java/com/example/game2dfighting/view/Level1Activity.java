@@ -116,15 +116,23 @@ public class Level1Activity extends AppCompatActivity {
     // Trong Level1Activity, sửa listener onGameOver (thêm hide overlay trước finish)
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
-            if (pauseOverlay != null) {
-                pauseOverlay.setVisibility(View.GONE);  // Ẩn overlay pause trước khi chuyển màn
-            }
-            // chỗ gọi GameOverActivity
+            if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            // LẤY CẤP HIỆN TẠI TỪ GAMEVIEW
+            int playerLevelCurrentNow = gameView.getCurrentPlayerLevel();
+
             Intent i = new Intent(Level1Activity.this, GameOverActivity.class);
             i.putExtra("restart_activity", Level1Activity.class.getName());
+
+            // >>> THÊM 3 EXTRAS NÀY <<<
+            i.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrentNow);
+
             startActivity(i);
             finish();
         }));
+
 
         // --- Joystick (thêm SAU GameView để ở trên) ---
         joystickView = new JoystickView(this, (x, y) -> {

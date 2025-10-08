@@ -133,11 +133,21 @@ public class Level3Activity extends AppCompatActivity {
         gameView.setGameEventListener(() -> runOnUiThread(() -> {
             stopAndRewindMusic();
             if (pauseOverlay != null) pauseOverlay.setVisibility(View.GONE);
+
+            int playerLevelCurrentNow = gameView.getCurrentPlayerLevel();
+
             Intent i = new Intent(Level3Activity.this, GameOverActivity.class);
             i.putExtra("restart_activity", Level3Activity.class.getName());
+
+            // >>> THÊM 3 EXTRAS NÀY <<<
+            i.putExtra(LevelClearActivity.EXTRA_DIFFICULTY, difficulty);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, playerLevelAtEntry);
+            i.putExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, playerLevelCurrentNow);
+
             startActivity(i);
             finish();
         }));
+
 
         // --- Joystick ở trên GameView ---
         joystickView = new JoystickView(this, (x, y) -> {
