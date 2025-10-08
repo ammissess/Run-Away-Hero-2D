@@ -773,10 +773,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     }
                 }
 
-
-
-
-
                 //===logicmap3 =====================
 
                 // boss
@@ -789,15 +785,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 if (bossMgr != null) {
                     bossMgr.maybeSpawn();
                     bossMgr.update(player, dtMs);
-
-                    // 🔒 Nếu đang ở Level3, không cho bossMgr kích hoạt Win
-                    if ("Level3".equalsIgnoreCase(levelName)) {
-                        bossDefeated = false; // reset để không bị trigger overlay Win
-                    }
                 }
 
-
-                //boss Angel
                 // BossAngel logic riêng cho Level3
                 if (bossAngel != null) {
                     bossAngel.update(dtMs);
@@ -1315,12 +1304,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 canvas.drawBitmap(bmpCongrats, null, dst, null);
             }
 
-            // Sau 2s thì chuyển High Score
             // Sau 2s thì báo WIN ra Activity (thay vì tự mở HighScore)
             long t = System.currentTimeMillis() - bossDefeatAtMs;
             if (t >= BOSS_CONGRATS_DURATION_MS && !bossTransitioned) {
                 bossTransitioned = true;
-                // ✅ Gọi callback onWin để LevelXActivity mở LevelClearActivity
+                // Optionally đánh dấu đã xử lý để tránh gọi trùng
+                winHandled = true;
                 if (onWinListener != null) onWinListener.onWin();
             }
         }
@@ -1855,11 +1844,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             bossDefeatAtMs = System.currentTimeMillis();
             bossTransitioned = false;
             bossFadeAlpha = 0f;
-        }
-
-        if (!winHandled) {
-            winHandled = true;
-            if (onWinListener != null) onWinListener.onWin();
         }
     }
 
