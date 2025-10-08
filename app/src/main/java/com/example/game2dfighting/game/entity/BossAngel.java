@@ -427,7 +427,7 @@ public class BossAngel extends GameObject {
             double angle = 2 * Math.PI * i / count;
             float dx = (float) Math.cos(angle);
             float dy = (float) Math.sin(angle);
-            bullets.add(new BossBullet(x + w / 2f, y + h / 2f, dx, dy, 7f, 0xFF00BFFF));
+            bullets.add(new BossBullet(x + w / 2f, y + h / 2f, dx, dy, 7f, 0xFFFF0000));
         }
     }
 
