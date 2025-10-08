@@ -4,7 +4,9 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.RectF;
 
 import com.example.game2dfighting.R;
@@ -27,28 +29,30 @@ public class Fireball {
     // ma trận xoay theo hướng bay
     private final Matrix matrix = new Matrix();
 
+    //fix spam crassh
+
     public Fireball(float cx, float cy, float vx, float vy, int mapW, int mapH, Context ctx){
         this.x = cx; this.y = cy;
         this.vx = vx; this.vy = vy;
         this.mapW = mapW; this.mapH = mapH;
 
-        // load 1 lần
-        if (fireballBmp == null) {
-            fireballBmp = BitmapFactory.decodeResource(ctx.getResources(), R.drawable.fireball);
-        }
-        if (fireballBmp != null && fireballScaled == null) {
-            // scale về kích thước hiển thị mong muốn
-            fireballScaled = Bitmap.createScaledBitmap(
-                    fireballBmp,
-                    (int) SPRITE_SIZE_PX,
-                    (int) SPRITE_SIZE_PX,
-                    true
-            );
+        synchronized (Fireball.class) {
+            if (fireballBmp == null || fireballBmp.isRecycled()) {
+                fireballBmp = BitmapFactory.decodeResource(ctx.getResources(), R.drawable.fireball);
+            }
+            if (fireballScaled == null || fireballScaled.isRecycled()) {
+                fireballScaled = Bitmap.createScaledBitmap(
+                        fireballBmp,
+                        (int) SPRITE_SIZE_PX,
+                        (int) SPRITE_SIZE_PX,
+                        true
+                );
+            }
         }
 
-        // và cập nhật bán kính va chạm match với sprite
         this.radius = SPRITE_SIZE_PX * 0.45f;
     }
+
 
     public void update(float dtSec){
         if (!alive) return;
@@ -62,28 +66,24 @@ public class Fireball {
 
     public void draw(Canvas c, int cameraX, int cameraY){
         if (!alive) return;
+
         float sx = x - cameraX;
         float sy = y - cameraY;
 
-        if (fireballScaled != null) {
-            // góc quay theo hướng bay (0° là trục X dương)
+        if (fireballScaled != null && !fireballScaled.isRecycled()) {
             float angleDeg = (float) Math.toDegrees(Math.atan2(vy, vx));
-
             matrix.reset();
-            // tịnh tiến sao cho tâm bitmap trùng tâm đạn
             matrix.postTranslate(-fireballScaled.getWidth()/2f, -fireballScaled.getHeight()/2f);
-            // xoay quanh tâm
             matrix.postRotate(angleDeg);
-            // đưa đến vị trí màn hình
             matrix.postTranslate(sx, sy);
-
             c.drawBitmap(fireballScaled, matrix, null);
         } else {
-            // fallback: nếu chưa có ảnh thì thôi không vẽ, hoặc bạn có thể vẽ hình tròn
-            // Paint p = new Paint(Paint.ANTI_ALIAS_FLAG); p.setColor(Color.RED);
-            // c.drawCircle(sx, sy, radius, p);
+            Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            p.setColor(Color.RED);
+            c.drawCircle(sx, sy, radius, p); // fallback
         }
     }
+
 
     /** Va chạm: tròn (đạn) vs. hộp (enemy). */
     public boolean hit(Enemy e){

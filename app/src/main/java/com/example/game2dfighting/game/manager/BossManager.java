@@ -1,10 +1,14 @@
 package com.example.game2dfighting.game.manager;
 
+import static java.util.Collections.list;
+
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 
+import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.entity.Boss;
+import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.entity.Player;
 
 /**
@@ -55,6 +59,22 @@ public class BossManager {
     public void setStatMultipliers(float hpMul, float dmgMul) {
         this.hpMul  = Math.max(0.1f, hpMul);
         this.dmgMul = Math.max(0.1f, dmgMul);
+    }
+
+    public void clearAll() {
+        try {
+            java.lang.reflect.Method setStateMethod =
+                    com.example.game2dfighting.game.core.GameObject.class.getDeclaredMethod(
+                            "setState", com.example.game2dfighting.game.core.GameObject.State.class);
+            setStateMethod.setAccessible(true);
+
+            if (boss != null) {
+                setStateMethod.invoke(boss, com.example.game2dfighting.game.core.GameObject.State.DIE);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        spawned = false;
     }
 
 

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 
+import com.example.game2dfighting.game.core.GameObject;
 import com.example.game2dfighting.game.entity.Enemy;
 import com.example.game2dfighting.game.entity.Enemy2;
 import com.example.game2dfighting.game.entity.Enemy3;
@@ -86,6 +87,20 @@ public class EnemyManager {
     public void setStatMultipliers(float hpMul, float dmgMul) {
         this.hpMul  = Math.max(0.1f, hpMul);
         this.dmgMul = Math.max(0.1f, dmgMul);
+    }
+
+
+    public void clearAll() {
+        for (Enemy e : list()) {
+            try {
+                java.lang.reflect.Method setStateMethod =
+                        e.getClass().getSuperclass().getDeclaredMethod("setState",
+                                com.example.game2dfighting.game.core.GameObject.State.class);
+                setStateMethod.setAccessible(true);
+                setStateMethod.invoke(e, com.example.game2dfighting.game.core.GameObject.State.DIE);
+            } catch (Exception ignore) {}
+        }
+        list().clear();
     }
 
     // Lưu cả max HP theo từng enemy để vẽ thanh máu đúng tỷ lệ

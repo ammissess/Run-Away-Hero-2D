@@ -849,6 +849,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
 
                 // ===== Update & cleanup FIREBALLS =====
                 float dtSec = dtMs / 1000f;
+                //fixx spam firrball
+                synchronized (fireballs) {
                 for (int i = fireballs.size() - 1; i >= 0; i--) {
                     Fireball b = fireballs.get(i);
                     try { b.update(dtSec); } catch (Throwable ignore) {}
@@ -903,7 +905,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                     }
 
                     if (hit) { b.alive = false; fireballs.remove(i); }
-                }
+                }}
 
                 // ===== Update & cleanup ICESPIKES =====
                 for (int i = icespikes.size() - 1; i >= 0; i--) {
@@ -1605,7 +1607,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
             // NEW: xin skill từ PlayerManager (tự check cooldown + trừ energy/mana)
             Fireball fb = playerMgr.tryUseFireball(tx, ty);
             if (fb != null) {
-                fireballs.add(fb);
+
+                synchronized (fireballs) {fireballs.add(fb);}
+
                 playFireSfx();
             } else {
                 // Không bắn được: cooldown/thiếu tài nguyên
