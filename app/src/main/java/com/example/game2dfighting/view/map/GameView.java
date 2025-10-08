@@ -1250,13 +1250,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         }
 
 
-        // 5) FIREBALLS
-        for (Fireball b : fireballs) {
-            b.draw(canvas, cameraX - islandX, cameraY - islandY);
+        // FIREBALLS
+        synchronized (fireballs) {
+            for (Fireball b : fireballs) {
+                b.draw(canvas, cameraX - islandX, cameraY - islandY);
+            }
         }
-        // 5b) ICESPIKES
-        for (IceSpike s : icespikes) {
-            s.draw(canvas, cameraX - islandX, cameraY - islandY);
+        // ICESPIKES
+        synchronized (icespikes) {
+            for (IceSpike s : icespikes) {
+                s.draw(canvas, cameraX - islandX, cameraY - islandY);
+            }
         }
         // 5c) SHIELDs
         if (playerHud != null) {
@@ -1636,7 +1640,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         if (!Float.isNaN(tx)) {
             IceSpike spike = playerMgr.tryUseIceSpike(tx, ty);
             if (spike != null) {
-                icespikes.add(spike);
+                synchronized (icespikes) {
+                    icespikes.add(spike);
+                }
                 playIceSfx();
             }
         }

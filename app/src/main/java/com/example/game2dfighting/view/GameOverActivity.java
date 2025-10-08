@@ -33,17 +33,17 @@ public class GameOverActivity extends AppCompatActivity {
     // >>> NEW: tên activity để restart
     private Class<?> restartActivityClass = Level1Activity.class; // fallback
 
-    // >>> LẤY THÊM CÁC EXTRAS VỀ CẤP/ĐỘ KHÓ
-    Intent in = getIntent();
-    final int replayDifficulty       = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
-    final int replayLevelAtEntry     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, 1);
-    final int replayLevelCurrent     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, replayLevelAtEntry);
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_game_over);
+
+        // >>> LẤY THÊM CÁC EXTRAS VỀ CẤP/ĐỘ KHÓ
+        Intent in = getIntent();
+        final int replayDifficulty       = in.getIntExtra(LevelClearActivity.EXTRA_DIFFICULTY, 1);
+        final int replayLevelAtEntry     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_AT_ENTRY, 1);
+        final int replayLevelCurrent     = in.getIntExtra(LevelClearActivity.EXTRA_PLAYER_LEVEL_CURRENT, replayLevelAtEntry);
 
         // Lấy tên Activity màn vừa thua (nếu có)
         String restartClassName = getIntent().getStringExtra("restart_activity");
