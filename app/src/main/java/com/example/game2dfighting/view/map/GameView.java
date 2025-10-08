@@ -36,6 +36,9 @@ import com.example.game2dfighting.game.entity.ShieldHeart;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import com.example.game2dfighting.game.entity.BossAngel;
+import com.example.game2dfighting.game.manager.BossAngelManager;
+
 
 public class GameView extends SurfaceView implements SurfaceHolder.Callback, Runnable {
     private static final String TAG = "GameView";
@@ -51,6 +54,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
     private Player player;
     private EnemyManager enemyMgr;
     private BossManager bossMgr;
+    private BossAngel bossAngel;  // ✨ Boss thiên thần riêng cho Level 3
+    private BossAngelManager bossAngelMgr;
+
+
 
     // NEW: HUD & PlayerManager
     private PlayerHudRenderer playerHud;
@@ -432,9 +439,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         });
         enemyMgr.setStatMultipliers(enemyHpMul, enemyDmgMul);
 
-        // Boss
+// Boss thường
         bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
         bossMgr.setStatMultipliers(bossHpMul, bossDmgMul);
+
+// Nếu là Level3 thì dùng BossAngelManager thay cho Boss thường
+        if ("Level3".equalsIgnoreCase(levelName)) {
+            bossAngelMgr = new BossAngelManager(getContext(), mapWidth, mapHeight);
+            bossAngelMgr.setStatMultipliers(bossHpMul, bossDmgMul);
+            bossAngelMgr.setKillListener(() -> addScore(200)); // +200 điểm
+
+            // ✨ Boss Angel sẽ xuất hiện sau 5 giây
+            new android.os.Handler().postDelayed(() -> {
+                bossAngelMgr.maybeSpawn();
+
+                // Sau khi spawn 10s → bắt đầu cho phép tấn công
+                new android.os.Handler().postDelayed(() -> {
+                    if (bossAngelMgr.getBoss() != null) {
+                        bossAngelMgr.getBoss().enableAttack(); // sẽ tạo hàm này
+                    }
+                }, 10_000);
+            }, 5_000);
+        }
+         else {
+            bossMgr = new BossManager(getContext(), mapWidth, mapHeight);
+            bossMgr.setStatMultipliers(bossHpMul, bossDmgMul);
+        }
+
+
+
 
         // Nếu Activity đã cấu hình trước -> apply lại
         if (pendingBossRespawnDelayMs >= 0L) {
@@ -655,6 +688,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 if (bossMgr != null) {
                     bossMgr.maybeSpawn();
                     bossMgr.update(player, dtMs);
+                }
+
+                //boss Angel
+                // BossAngel logic riêng cho Level3
+                if (bossAngel != null) {
+                    bossAngel.update(dtMs);
+                }
+
+                if (bossAngelMgr != null) {
+                    bossAngelMgr.update(player, dtMs);
                 }
 
 // ===== NEW: Collision player-enemies/boss + push back + flash =====
@@ -970,13 +1013,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
                 if (playerHud != null && playerHud.isInShieldButton(tx, ty)) {
                     if (playerMgr != null) {
                         boolean willCast = playerMgr.getRemainingCooldownMs(PlayerManager.SkillType.SHIELD) <= 0;
-                        playerMgr.tryUseShield(enemyMgr, bossMgr);
+                        playerMgr.tryUseShield(enemyMgr, bossMgr,bossAngelMgr);
                         if (willCast) {
                             playShieldSfx();
                         }
                     }
                     return true;
                 }
+
                 break;
             }
         }
@@ -1106,6 +1150,15 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback, Run
         player.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
         enemyMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
         if (bossMgr != null) bossMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
+
+        //vẽ boss angel
+        if (bossAngel != null) {
+            bossAngel.draw(canvas, cameraX - islandX, cameraY - islandY, paint);
+        }
+        if (bossAngelMgr != null) {
+            bossAngelMgr.draw(canvas, cameraX - islandX, cameraY - islandY);
+        }
+
 
         // 5) FIREBALLS
         for (Fireball b : fireballs) {

@@ -59,7 +59,7 @@ public class ShieldBomb extends Shield {  // Kế thừa từ Shield để giữ
      * Gọi khi player ấn nút Shield (trong PlayerManager.tryUseShieldBomb hoặc tương tự).
      * Sau đó bắt đầu hiệu ứng sóng lan tỏa.
      */
-    public void triggerExplosion(EnemyManager enemyMgr, BossManager bossMgr) {
+    public void triggerExplosion(EnemyManager enemyMgr, BossManager bossMgr, com.example.game2dfighting.game.manager.BossAngelManager bossAngelMgr) {
         if (exploded) return;
 
         long now = System.currentTimeMillis();
@@ -93,6 +93,32 @@ public class ShieldBomb extends Shield {  // Kế thừa từ Shield để giữ
 
         // === Áp dụng cho Boss ===
         if (bossMgr != null && bossMgr.isActive()) {
+
+            com.example.game2dfighting.game.entity.BossAngel angel = bossAngelMgr.getBoss();
+            if (angel != null) {
+                try {
+                    // Lấy HP hiện tại từ BossAngelManager
+                    java.lang.reflect.Field hpField = bossAngelMgr.getClass().getDeclaredField("bossHp");
+                    hpField.setAccessible(true);
+                    int currentHp = hpField.getInt(bossAngelMgr);
+
+                    int dmg = (int) (currentHp * DAMAGE_PERCENT);
+
+                    // Gọi applyBulletHit để trừ máu boss
+                    java.lang.reflect.Method hitMethod =
+                            bossAngelMgr.getClass().getMethod("applyBulletHit", int.class);
+                    hitMethod.invoke(bossAngelMgr, dmg);
+
+                    // Đẩy boss angel lùi
+                    float bx = angel.x + angel.w / 2f;
+                    float by = angel.y + angel.h / 2f;
+                    pushBackEntity(angel, px, py, bx, by);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
             Boss boss = bossMgr.getBoss();
             if (boss != null) {
                 try {

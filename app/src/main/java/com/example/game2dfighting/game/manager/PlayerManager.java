@@ -137,7 +137,7 @@ public class PlayerManager {
     }
 */
     public void tryUseShield() {
-        tryUseShield(null, null); // gọi version mới
+        tryUseShield(null, null,null); // gọi version mới
     }
 
     public long getRemainingCooldownMs(SkillType type) {
@@ -151,7 +151,9 @@ public class PlayerManager {
 
 
     // Version mới nhận EnemyManager và BossManager
-    public void tryUseShield(EnemyManager enemyMgr, BossManager bossMgr) {
+    public void tryUseShield(EnemyManager enemyMgr, BossManager bossMgr,
+                             com.example.game2dfighting.game.manager.BossAngelManager bossAngelMgr)
+    {
         if (player == null) return;
 
         SkillConfig cfg = configs.get(SkillType.SHIELD);
@@ -175,7 +177,7 @@ public class PlayerManager {
         if (currentShield instanceof ShieldBomb && currentShield.isActive()) {
             // Nếu đang có ShieldBomb active -> kích nổ
             ShieldBomb bomb = (ShieldBomb) currentShield;
-            bomb.triggerExplosion(enemyMgr, bossMgr);
+            bomb.triggerExplosion(enemyMgr, bossMgr,bossAngelMgr);
         } else if (currentShield != null && currentShield.isActive()) {
             // Nếu có shield thường active -> không làm gì (hoặc reset thời gian)
             // Có thể thêm logic extend shield duration ở đây
